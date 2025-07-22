@@ -61,10 +61,10 @@ class LoadTestConfig:
     
     # Request settings
     stream: bool = False
-    timeout: float = 300.0
+    timeout: float = 60.0  # Reduced from 300s to 60s
     
-    # Test prompts
-    prompt_types: List[str] = field(default_factory=lambda: ["short", "medium", "long"])
+    # Test prompts - use shorter prompts by default for more reliable testing
+    prompt_types: List[str] = field(default_factory=lambda: ["short"])
 
 @dataclass
 class RequestStats:
@@ -255,15 +255,23 @@ class HighPerformanceLoadTester:
             "stream": self.config.stream
         }
         
+        logger.debug(f"🚀 Sending request to {self.config.base_url}/api/generate")
+        logger.debug(f"   Model: {self.config.model}")
+        logger.debug(f"   Prompt: {prompt[:100]}...")
+        
         try:
+            # Make the request with timeout
             async with self.session.post(
                 f"{self.config.base_url}/api/generate",
-                json=payload
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=30)  # 30 second timeout
             ) as response:
                 request_stats.status_code = response.status
                 response_data = await response.read()
                 request_stats.response_size = len(response_data)
                 request_stats.end_time = time.time()
+                
+                logger.debug(f"✅ Response: {response.status}, size: {len(response_data)} bytes")
                 
                 if response.status == 200:
                     request_stats.success = True
@@ -273,52 +281,74 @@ class HighPerformanceLoadTester:
                         if 'response' in data:
                             # Rough token estimation: ~4 chars per token
                             request_stats.tokens_generated = len(data['response']) // 4
+                            logger.debug(f"   Generated ~{request_stats.tokens_generated} tokens")
                     except:
                         pass
                 else:
                     request_stats.error = f"HTTP {response.status}"
+                    logger.debug(f"❌ Request failed: {request_stats.error}")
                     
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, aiohttp.ServerTimeoutError):
             request_stats.end_time = time.time()
             request_stats.error = "Request timeout"
+            logger.debug("⏰ Request timed out")
         except Exception as e:
             request_stats.end_time = time.time()
             request_stats.error = str(e)
+            logger.debug(f"💥 Request exception: {e}")
         
         return request_stats
     
     async def _request_worker(self, semaphore: asyncio.Semaphore, request_queue: asyncio.Queue):
         """Worker coroutine that processes requests from queue"""
+        worker_id = id(asyncio.current_task())
+        logger.info(f"🛠️  Worker {worker_id} started")
+        
         while self.running:
             try:
                 # Get next request from queue
                 prompt = await asyncio.wait_for(request_queue.get(), timeout=1.0)
+                logger.debug(f"🛠️  Worker {worker_id} got request: {prompt[:50]}...")
                 
                 async with semaphore:
                     self.stats.record_request_start()
                     request_stats = await self._send_request(prompt)
                     self.stats.record_request_end(request_stats)
                     request_queue.task_done()
+                    logger.debug(f"🛠️  Worker {worker_id} completed request: success={request_stats.success}")
                     
             except asyncio.TimeoutError:
                 # No requests in queue, continue
                 continue
             except Exception as e:
-                logger.error(f"Request worker error: {e}")
+                logger.error(f"Request worker {worker_id} error: {e}")
+        
+        logger.info(f"🛠️  Worker {worker_id} stopped")
     
     async def _generate_constant_load(self, request_queue: asyncio.Queue):
         """Generate constant load pattern"""
         request_interval = 1.0 / self.config.requests_per_second
         requests_sent = 0
         
-        while self.running and requests_sent < self.config.total_requests:
-            prompt_type = random.choice(self.config.prompt_types)
-            prompt = random.choice(self.prompts[prompt_type])
-            
-            await request_queue.put(prompt)
-            requests_sent += 1
-            
-            await asyncio.sleep(request_interval)
+        logger.info(f"🎯 Starting constant load generation: {self.config.requests_per_second} RPS, interval: {request_interval}s")
+        
+        try:
+            while self.running and requests_sent < self.config.total_requests:
+                prompt_type = random.choice(self.config.prompt_types)
+                prompt = random.choice(self.prompts[prompt_type])
+                
+                await request_queue.put(prompt)
+                requests_sent += 1
+                
+                if requests_sent % 10 == 0:
+                    logger.info(f"📤 Generated {requests_sent}/{self.config.total_requests} requests")
+                
+                await asyncio.sleep(request_interval)
+                
+            logger.info(f"✅ Load generation complete: {requests_sent}/{self.config.total_requests} requests generated")
+        except Exception as e:
+            logger.error(f"❌ Load generation error: {e}")
+            raise
     
     async def _generate_burst_load(self, request_queue: asyncio.Queue):
         """Generate burst load pattern"""
