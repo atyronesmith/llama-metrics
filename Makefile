@@ -108,7 +108,8 @@ stop-proxy:
 ## stop-prometheus: Stop Prometheus
 stop-prometheus:
 	@echo "$(BLUE)Stopping Prometheus...$(NC)"
-	@pkill -x "prometheus" || true
+	@pkill -x "prometheus" 2>/dev/null || true
+	@(podman stop prometheus 2>/dev/null || docker stop prometheus 2>/dev/null) || true
 	@echo "$(GREEN)✅ Prometheus stopped$(NC)"
 
 ## restart: Restart all monitoring services
@@ -129,7 +130,9 @@ status:
 		echo "$(RED)❌ Monitoring Proxy: Not running$(NC)"; \
 	fi
 	@if pgrep -x "prometheus" > /dev/null; then \
-		echo "$(GREEN)✅ Prometheus: Running$(NC)"; \
+		echo "$(GREEN)✅ Prometheus: Running (native)$(NC)"; \
+	elif (podman ps 2>/dev/null || docker ps 2>/dev/null) | grep -q prometheus; then \
+		echo "$(GREEN)✅ Prometheus: Running (container)$(NC)"; \
 	else \
 		echo "$(RED)❌ Prometheus: Not running$(NC)"; \
 	fi
@@ -173,6 +176,11 @@ metrics:
 health:
 	@echo "$(BLUE)Checking monitoring proxy health...$(NC)"
 	@curl -s http://localhost:8001/health | jq . || echo "$(RED)❌ Proxy not responding$(NC)"
+
+## prometheus-ui: Open Prometheus UI in browser
+prometheus-ui:
+	@echo "$(BLUE)Opening Prometheus UI...$(NC)"
+	@open http://localhost:9090 || xdg-open http://localhost:9090 || echo "$(YELLOW)Please open http://localhost:9090 in your browser$(NC)"
 
 ## test: Run monitoring tests
 test: venv
