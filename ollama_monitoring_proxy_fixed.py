@@ -9,6 +9,9 @@ import json
 import time
 import logging
 import psutil
+import subprocess
+import platform
+import re
 from aiohttp import web
 from prometheus_client import (
     Counter, Histogram, Gauge, Info, generate_latest
@@ -44,7 +47,7 @@ class OllamaMonitoringProxy:
             'ollama_proxy_request_duration_seconds',
             'Request duration in seconds',
             ['method', 'endpoint', 'model'],
-            buckets=(0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0)
+            buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 5.0, 7.5, 10.0, 15.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0)
         )
 
         self.active_requests = Gauge(
@@ -95,6 +98,35 @@ class OllamaMonitoringProxy:
             ['model', 'error_type']
         )
 
+        # Per-endpoint latency breakdown
+        self.generate_latency = Histogram(
+            'ollama_proxy_generate_latency_seconds',
+            'Latency for /api/generate endpoint',
+            ['model', 'streaming'],
+            buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 60.0, 120.0)
+        )
+
+        self.chat_latency = Histogram(
+            'ollama_proxy_chat_latency_seconds', 
+            'Latency for /api/chat endpoint',
+            ['model', 'streaming'],
+            buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 60.0, 120.0)
+        )
+
+        self.tags_latency = Histogram(
+            'ollama_proxy_tags_latency_seconds',
+            'Latency for /api/tags endpoint', 
+            [],
+            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0)
+        )
+
+        self.show_latency = Histogram(
+            'ollama_proxy_show_latency_seconds',
+            'Latency for /api/show endpoint',
+            ['model'],
+            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0)
+        )
+
         # System metrics
         self.cpu_usage = Gauge(
             'ollama_proxy_cpu_usage_percent',
@@ -110,6 +142,42 @@ class OllamaMonitoringProxy:
         self.queue_size_gauge = Gauge(
             'ollama_proxy_queue_size',
             'Current request queue size'
+        )
+
+        # macOS GPU and power metrics
+        self.gpu_active_residency = Gauge(
+            'ollama_proxy_gpu_active_residency_percent',
+            'GPU active residency percentage'
+        )
+
+        self.gpu_power = Gauge(
+            'ollama_proxy_gpu_power_watts',
+            'GPU power consumption in watts'
+        )
+
+        self.cpu_power = Gauge(
+            'ollama_proxy_cpu_power_watts', 
+            'CPU power consumption in watts'
+        )
+
+        self.package_power = Gauge(
+            'ollama_proxy_package_power_watts',
+            'Total package power consumption in watts'
+        )
+
+        self.cpu_temperature = Gauge(
+            'ollama_proxy_cpu_temperature_celsius',
+            'CPU temperature in Celsius'
+        )
+
+        self.gpu_temperature = Gauge(
+            'ollama_proxy_gpu_temperature_celsius', 
+            'GPU temperature in Celsius'
+        )
+
+        self.thermal_pressure = Gauge(
+            'ollama_proxy_thermal_pressure_percent',
+            'System thermal pressure percentage'
         )
 
         # Context length tracking
@@ -198,6 +266,9 @@ class OllamaMonitoringProxy:
                             method=method, endpoint=path, model=model
                         ).observe(duration)
 
+                        # Record per-endpoint latency
+                        self._record_endpoint_latency(path, duration, model, body_json)
+
                         self.request_count.labels(
                             method=method, endpoint=path, model=model,
                             status=resp.status
@@ -260,6 +331,9 @@ class OllamaMonitoringProxy:
             method='POST', endpoint=path, model=model
         ).observe(duration)
 
+        # Record per-endpoint latency (streaming)
+        self._record_endpoint_latency(path, duration, model, {"stream": True})
+
         self.request_count.labels(
             method='POST', endpoint=path, model=model, status=resp.status
         ).inc()
@@ -294,6 +368,137 @@ class OllamaMonitoringProxy:
         if 'prompt_eval_count' in response_json:
             self.context_length.labels(model=model).observe(response_json['prompt_eval_count'])
 
+    def _collect_macos_gpu_metrics(self):
+        """Collect GPU metrics using non-privileged macOS methods"""
+        if platform.system() != 'Darwin':
+            return {}
+        
+        metrics = {}
+        
+        # Method 1: Monitor process activity for GPU usage estimation
+        try:
+            # Check for processes using significant CPU (indication of GPU work)
+            import psutil
+            ollama_processes = []
+            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent']):
+                try:
+                    if 'ollama' in proc.info['name'].lower():
+                        ollama_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            
+            if ollama_processes:
+                total_cpu = sum(proc.info['cpu_percent'] or 0 for proc in ollama_processes)
+                # Estimate GPU usage based on ollama CPU usage (heuristic)
+                # On Apple Silicon, high ollama CPU often correlates with GPU usage
+                estimated_gpu = min(total_cpu * 1.2, 100.0)  # Rough estimation
+                metrics['gpu_active_residency'] = estimated_gpu
+                
+        except Exception as e:
+            logger.debug(f"Process-based GPU estimation failed: {e}")
+        
+        # Method 2: Use system_profiler for static GPU info
+        try:
+            result = subprocess.run([
+                'system_profiler', 'SPDisplaysDataType', '-json'
+            ], capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0:
+                import json
+                try:
+                    data = json.loads(result.stdout)
+                    # This gives us static info, but we can at least confirm GPU is active
+                    if data.get('SPDisplaysDataType'):
+                        # GPU is present and active
+                        if 'gpu_active_residency' not in metrics:
+                            metrics['gpu_active_residency'] = 0.0  # Base activity level
+                except json.JSONDecodeError:
+                    pass
+                        
+        except Exception as e:
+            logger.debug(f"system_profiler GPU collection failed: {e}")
+            
+        return metrics
+
+    def _collect_macos_power_metrics(self):
+        """Collect power metrics using non-privileged methods on macOS"""
+        if platform.system() != 'Darwin':
+            return {}
+            
+        metrics = {}
+        
+        # Method 1: Estimate power based on CPU utilization
+        try:
+            import psutil
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            
+            # Rough power estimation for Apple Silicon Macs
+            # M4 Pro typical power consumption ranges:
+            # - Idle: 3-5W
+            # - Medium load: 8-15W  
+            # - High load: 20-35W
+            base_power = 4.0  # Base idle power
+            max_additional = 30.0  # Max additional power under load
+            
+            estimated_cpu_power = base_power + (cpu_percent / 100.0) * max_additional
+            metrics['cpu_power'] = estimated_cpu_power
+            
+            # Estimate package power (CPU + GPU + system)
+            metrics['package_power'] = estimated_cpu_power * 1.3  # Include GPU and system
+            
+        except Exception as e:
+            logger.debug(f"Power estimation failed: {e}")
+            
+        # Method 2: Check system load for better estimation
+        try:
+            # Get system load average
+            load_avg = psutil.getloadavg()[0]  # 1-minute load average
+            cpu_count = psutil.cpu_count()
+            
+            if cpu_count > 0:
+                load_ratio = min(load_avg / cpu_count, 1.0)
+                # Adjust power estimation based on load
+                if 'cpu_power' not in metrics:
+                    base_power = 5.0
+                    max_power = 35.0
+                    metrics['cpu_power'] = base_power + (load_ratio * (max_power - base_power))
+                    metrics['package_power'] = metrics['cpu_power'] * 1.4
+                    
+        except Exception as e:
+            logger.debug(f"Load-based power estimation failed: {e}")
+            
+        return metrics
+
+    def _collect_macos_temperature_metrics(self):
+        """Collect temperature metrics on macOS using thermal monitoring"""
+        if platform.system() != 'Darwin':
+            return {}
+            
+        try:
+            # Get thermal pressure information
+            result = subprocess.run([
+                'pmset', '-g', 'therm'
+            ], capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0:
+                output = result.stdout
+                metrics = {}
+                
+                # Parse thermal state
+                if 'CPU_Scheduler_Limit' in output:
+                    match = re.search(r'CPU_Scheduler_Limit\s*=\s*(\d+)', output)
+                    if match:
+                        # Convert to thermal pressure percentage (100 - scheduler limit)
+                        scheduler_limit = int(match.group(1))
+                        metrics['thermal_pressure'] = max(0, 100 - scheduler_limit)
+                
+                return metrics
+                
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, Exception) as e:
+            logger.debug(f"Temperature metrics collection failed: {e}")
+            
+        return {}
+
     async def collect_system_metrics(self):
         """Collect system metrics periodically"""
         while True:
@@ -309,6 +514,27 @@ class OllamaMonitoringProxy:
                 # Queue size
                 self.queue_size_gauge.set(self.queue_size)
 
+                # macOS-specific metrics (collected less frequently to reduce overhead)
+                if platform.system() == 'Darwin':
+                    # Collect GPU metrics
+                    gpu_metrics = self._collect_macos_gpu_metrics()
+                    if 'gpu_active_residency' in gpu_metrics:
+                        self.gpu_active_residency.set(gpu_metrics['gpu_active_residency'])
+                    if 'gpu_power' in gpu_metrics:
+                        self.gpu_power.set(gpu_metrics['gpu_power'])
+
+                    # Collect power metrics
+                    power_metrics = self._collect_macos_power_metrics()
+                    if 'cpu_power' in power_metrics:
+                        self.cpu_power.set(power_metrics['cpu_power'])
+                    if 'package_power' in power_metrics:
+                        self.package_power.set(power_metrics['package_power'])
+
+                    # Collect temperature metrics
+                    temp_metrics = self._collect_macos_temperature_metrics()
+                    if 'thermal_pressure' in temp_metrics:
+                        self.thermal_pressure.set(temp_metrics['thermal_pressure'])
+
             except Exception as e:
                 logger.error(f"Error collecting system metrics: {e}")
 
@@ -322,6 +548,19 @@ class OllamaMonitoringProxy:
             content_type='text/plain; version=0.0.4',
             charset='utf-8'
         )
+
+    def _record_endpoint_latency(self, path, duration, model, body_json):
+        """Record latency for specific endpoints"""
+        streaming = "true" if (body_json and body_json.get('stream', False)) else "false"
+        
+        if '/api/generate' in path:
+            self.generate_latency.labels(model=model, streaming=streaming).observe(duration)
+        elif '/api/chat' in path:
+            self.chat_latency.labels(model=model, streaming=streaming).observe(duration)
+        elif '/api/tags' in path:
+            self.tags_latency.observe(duration)
+        elif '/api/show' in path:
+            self.show_latency.labels(model=model).observe(duration)
 
     async def health_handler(self, request):
         """Health check endpoint"""

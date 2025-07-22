@@ -86,13 +86,11 @@ start-proxy: venv
 
 ## start-prometheus: Start Prometheus
 start-prometheus:
-	@if ! pgrep -x "prometheus" > /dev/null; then \
-		echo "$(BLUE)Starting Prometheus...$(NC)"; \
-		prometheus --config.file=prometheus_config.yml > prometheus.log 2>&1 & \
-		sleep 2; \
-		echo "$(GREEN)✅ Prometheus started$(NC)"; \
+	@if ! (podman ps 2>/dev/null | grep -q prometheus); then \
+		echo "$(BLUE)Starting Prometheus container...$(NC)"; \
+		./run_prometheus.sh; \
 	else \
-		echo "$(YELLOW)Prometheus is already running$(NC)"; \
+		echo "$(YELLOW)Prometheus container is already running$(NC)"; \
 	fi
 
 ## stop: Stop all monitoring services

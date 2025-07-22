@@ -2,10 +2,19 @@ global:
   scrape_interval: 15s # How often to scrape metrics
 
 scrape_configs:
-  - job_name: 'llamastack_app'
-    # This job defines how to find and scrape metrics from your Python app.
+  # Primary job for the newer Ollama monitoring proxy
+  - job_name: 'ollama_proxy'
     static_configs:
-      - targets: ['host.containers.internal:8000']
+      - targets: ['host.containers.internal:8001']
+        labels:
+          instance: 'ollama-proxy'
         # 'host.containers.internal' is a special DNS name for Podman that allows the
         # container to connect to a service running on the host machine (your Mac).
         # It is the equivalent of 'host.docker.internal' for Docker.
+
+  # Optional job for legacy metrics server (comment out if not needed)
+  # - job_name: 'llamastack_app'
+  #   static_configs:
+  #     - targets: ['host.containers.internal:8000']
+  #       labels:
+  #         instance: 'llamastack-legacy'
