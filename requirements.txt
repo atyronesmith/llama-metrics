@@ -1,5 +1,6 @@
-# For traffic generator only
+# For traffic generator and metrics servers
 aiohttp>=3.8.0
+psutil>=5.9.0
 
 # For LlamaIndex app.py (uncomment if running app.py)
 # llama-index>=0.10.0
