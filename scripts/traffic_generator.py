@@ -30,9 +30,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class OllamaTrafficGenerator:
-    def __init__(self, model: str = "phi3:mini", base_url: str = "http://localhost:11434"):
+    def __init__(self, model: str = "phi3:mini", base_url: str = "http://localhost:8000"):
         self.model = model
         self.base_url = base_url
+        self.api_key = "sk-1234567890abcdef"  # LiteLLM API key
         self.questions = []
         self.stats = {
             "total_requests": 0,
@@ -90,26 +91,38 @@ class OllamaTrafficGenerator:
             sys.exit(1)
 
     async def check_ollama_health(self) -> bool:
-        """Check if Ollama is running and accessible"""
+        """Check if LiteLLM proxy is running and accessible"""
         try:
+            headers = {"Authorization": f"Bearer {self.api_key}"}
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.base_url}/api/tags") as response:
+                async with session.get(f"{self.base_url}/v1/models", headers=headers) as response:
                     if response.status == 200:
-                        logger.info("✅ Ollama is running and accessible")
+                        logger.info("✅ LiteLLM proxy is running and accessible")
                         return True
                     else:
-                        logger.error(f"❌ Ollama returned status {response.status}")
+                        logger.error(f"❌ LiteLLM proxy returned status {response.status}")
                         return False
         except Exception as e:
-            logger.error(f"❌ Cannot connect to Ollama: {e}")
+            logger.error(f"❌ Cannot connect to LiteLLM proxy: {e}")
             return False
 
     async def send_prompt(self, question: str) -> Optional[Dict]:
-        """Send a single prompt to Ollama"""
+        """Send a single prompt to LiteLLM (OpenAI-compatible API)"""
         payload = {
             "model": self.model,
-            "prompt": question,
-            "stream": False
+            "messages": [
+                {
+                    "role": "user", 
+                    "content": question
+                }
+            ],
+            "stream": False,
+            "max_tokens": 500
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
 
         start_time = time.time()
@@ -117,8 +130,9 @@ class OllamaTrafficGenerator:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/api/generate",
+                    f"{self.base_url}/v1/chat/completions",
                     json=payload,
+                    headers=headers,
                     timeout=aiohttp.ClientTimeout(total=120)
                 ) as response:
 
@@ -132,14 +146,17 @@ class OllamaTrafficGenerator:
 
                         logger.info(f"✅ Q{self.stats['total_requests']}: {question[:50]}... (Latency: {latency:.2f}s)")
 
-                        # Optionally show response (first 100 chars)
-                        response_text = result.get("response", "")
+                        # Extract response from OpenAI format
+                        response_text = ""
+                        if 'choices' in result and result['choices']:
+                            response_text = result['choices'][0].get('message', {}).get('content', '')
+                        
                         if response_text:
                             logger.info(f"🤖 Response: {response_text[:100]}{'...' if len(response_text) > 100 else ''}")
 
                         return {
                             "question": question,
-                            "response": result.get("response", ""),
+                            "response": response_text,
                             "latency": latency,
                             "timestamp": datetime.now().isoformat()
                         }

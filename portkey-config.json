@@ -1,0 +1,8 @@
+{
+  "provider": "ollama",
+  "api_key": "dummy",
+  "base_url": "http://192.168.10.83:11434",
+  "override_params": {
+    "model": "phi3:mini"
+  }
+}

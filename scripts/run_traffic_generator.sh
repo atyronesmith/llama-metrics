@@ -52,7 +52,7 @@ check_proxy() {
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
             echo "Starting monitoring proxy..."
-            ./venv/bin/python ollama_monitoring_proxy.py > proxy.log 2>&1 &
+            ../venv/bin/python ../ollama_monitoring_proxy.py > ../proxy.log 2>&1 &
             sleep 3
             echo -e "${GREEN}✅ Monitoring proxy started${NC}"
         else
@@ -149,7 +149,7 @@ if [ -z "$1" ]; then
 fi
 
 # Build the command
-CMD="./venv/bin/python traffic_generator.py --model $DEFAULT_MODEL --url $DEFAULT_URL --delay $DEFAULT_DELAY"
+CMD="../venv/bin/python traffic_generator.py --model $DEFAULT_MODEL --url $DEFAULT_URL --delay $DEFAULT_DELAY"
 
 if [ -n "$DEFAULT_MAX" ]; then
     CMD="$CMD --max $DEFAULT_MAX"

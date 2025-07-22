@@ -1,0 +1,65 @@
+# LiteLLM Configuration for Ollama Monitoring Stack
+# Provides priority queues and rate limiting for better monitoring experience
+
+model_list:
+  # Main Ollama instance for regular traffic
+  - model_name: "phi3:mini"
+    litellm_params:
+      model: "ollama/phi3:mini"
+      api_base: "http://localhost:11434"
+      stream: true
+    model_info:
+      id: "ollama-main"
+      db_model_id: "ollama-main"
+
+# Router settings - simplified for basic functionality  
+router_settings:
+  enable_pre_call_checks: false
+  num_retries: 1
+  timeout: 120
+  health_check_interval: 300
+
+# General settings
+general_settings:
+  # API Configuration
+  master_key: "sk-1234567890abcdef"  # Set a secure key
+  database_url: null  # Can add SQLite later for persistence
+  
+  # Logging and monitoring
+  set_verbose: true
+  json_logs: true
+  
+  # Health checks
+  health_check: true
+  
+  # CORS settings
+  cors_origins: ["http://localhost:3001", "http://localhost:8001"]
+  
+  # Rate limiting per user/key
+  max_budget: 100  # Budget per key
+  budget_duration: "1h"  # Reset budget every hour
+  
+  # Request queue settings
+  max_request_size_mb: 50
+  max_file_size_mb: 40
+  
+  # Performance settings
+  num_workers: 4
+  
+  # Security
+  allow_reset_password: false
+  store_model_in_db: false
+
+# Prometheus callbacks configuration
+callbacks:
+  - prometheus
+
+# Basic litellm settings
+litellm_settings:
+  cache: false
+
+# Environment variables to set
+environment:
+  OLLAMA_BASE_URL: "http://localhost:11434"
+  LITELLM_LOG: "INFO"
+  LITELLM_DROP_PARAMS: "true"

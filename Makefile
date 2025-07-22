@@ -21,16 +21,108 @@ NC := \033[0m # No Color
 
 ## help: Show this help message
 help:
-	@echo "$(BLUE)Ollama Monitoring Stack - Available Targets$(NC)"
-	@echo "=============================================="
+	@echo "$(BLUE)🚀 Ollama Monitoring Stack - Mac M-Series Edition$(NC)"
+	@echo "================================================="
 	@echo ""
-	@grep -E '^## ' Makefile | sed 's/## //' | column -t -s ':'
+	@echo "$(GREEN)🎯 QUICK START (New Users):$(NC)"
+	@echo "  make setup start        # Complete automated install & start"
+	@echo "  make traffic           # Generate test traffic"
 	@echo ""
-	@echo "$(YELLOW)Quick Start:$(NC) make setup start traffic"
+	@echo "$(GREEN)🛠️  SETUP COMMANDS:$(NC)"
+	@grep -E '^## (setup|check-system|install-|pull-model|quick-setup)' Makefile | sed 's/## /  /' | column -t -s ':'
+	@echo ""
+	@echo "$(GREEN)🚦 SERVICE COMMANDS:$(NC)"
+	@grep -E '^## (start|stop|restart|status)' Makefile | sed 's/## /  /' | column -t -s ':'
+	@echo ""
+	@echo "$(GREEN)📊 MONITORING & TESTING:$(NC)"
+	@grep -E '^## (traffic|load-test|dashboard|metrics|logs)' Makefile | sed 's/## /  /' | column -t -s ':'
+	@echo ""
+	@echo "$(GREEN)🔧 UTILITIES:$(NC)"
+	@grep -E '^## (clean|lint|test|validate)' Makefile | sed 's/## /  /' | column -t -s ':'
+	@echo ""
+	@echo "$(BLUE)📖 More Info:$(NC) See SETUP.md for detailed installation guide"
 
-## setup: Complete setup (venv, dependencies, pull model)
-setup: venv install pull-model validate
-	@echo "$(GREEN)✅ Setup complete!$(NC)"
+## check-system: Verify Mac M-series and system requirements
+check-system:
+	@echo "$(BLUE)Checking system requirements...$(NC)"
+	@if [[ "$$(uname -s)" != "Darwin" ]]; then \
+		echo "$(RED)❌ This setup is designed for macOS only$(NC)"; \
+		exit 1; \
+	fi
+	@if [[ "$$(uname -m)" != "arm64" ]]; then \
+		echo "$(YELLOW)⚠️  Warning: This setup is optimized for M-series Macs (arm64)$(NC)"; \
+		echo "$(YELLOW)   Your system: $$(uname -m)$(NC)"; \
+	else \
+		echo "$(GREEN)✅ Mac M-series detected$(NC)"; \
+	fi
+	@if ! command -v python3 >/dev/null 2>&1; then \
+		echo "$(RED)❌ Python 3 is required but not installed$(NC)"; \
+		echo "$(YELLOW)Please install Python 3 from https://python.org$(NC)"; \
+		exit 1; \
+	else \
+		echo "$(GREEN)✅ Python 3 found: $$(python3 --version)$(NC)"; \
+	fi
+	@if ! command -v curl >/dev/null 2>&1; then \
+		echo "$(RED)❌ curl is required but not installed$(NC)"; \
+		exit 1; \
+	else \
+		echo "$(GREEN)✅ curl found$(NC)"; \
+	fi
+
+## install-ollama: Install Ollama if not present
+install-ollama:
+	@echo "$(BLUE)Checking Ollama installation...$(NC)"
+	@if command -v ollama >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ Ollama already installed: $$(ollama --version)$(NC)"; \
+	else \
+		echo "$(YELLOW)Installing Ollama for macOS...$(NC)"; \
+		curl -fsSL https://ollama.ai/install.sh | sh; \
+		if command -v ollama >/dev/null 2>&1; then \
+			echo "$(GREEN)✅ Ollama installed successfully$(NC)"; \
+		else \
+			echo "$(RED)❌ Ollama installation failed$(NC)"; \
+			echo "$(YELLOW)Please install manually:$(NC)"; \
+			echo "  1. Visit https://ollama.ai"; \
+			echo "  2. Download Ollama for Mac"; \
+			echo "  3. Run the installer"; \
+			echo "  4. Restart terminal and run 'make setup' again"; \
+			exit 1; \
+		fi \
+	fi
+
+## install-prometheus: Install Prometheus if not present  
+install-prometheus:
+	@echo "$(BLUE)Checking Prometheus installation...$(NC)"
+	@if command -v prometheus >/dev/null 2>&1; then \
+		echo "$(GREEN)✅ Prometheus already installed$(NC)"; \
+	elif command -v brew >/dev/null 2>&1; then \
+		echo "$(YELLOW)Installing Prometheus via Homebrew...$(NC)"; \
+		brew install prometheus; \
+		if command -v prometheus >/dev/null 2>&1; then \
+			echo "$(GREEN)✅ Prometheus installed successfully$(NC)"; \
+		else \
+			echo "$(RED)❌ Prometheus installation failed$(NC)"; \
+			exit 1; \
+		fi \
+	else \
+		echo "$(YELLOW)Homebrew not found. Providing manual installation instructions:$(NC)"; \
+		echo ""; \
+		echo "$(BLUE)To install Prometheus manually:$(NC)"; \
+		echo "  1. Install Homebrew: /bin/bash -c \"\$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""; \
+		echo "  2. Run: brew install prometheus"; \
+		echo "  3. Or download from: https://prometheus.io/download/"; \
+		echo ""; \
+		echo "$(YELLOW)For now, continuing with setup (Prometheus will start when available)$(NC)"; \
+	fi
+
+## setup: Complete automated setup for Mac M-series (install everything)
+setup: check-system install-ollama install-prometheus venv install pull-model validate
+	@echo "$(GREEN)🚀 Complete setup finished!$(NC)"
+	@echo "$(BLUE)Run 'make start' to launch the monitoring stack$(NC)"
+
+## quick-setup: Setup with existing Ollama/Prometheus
+quick-setup: venv install pull-model validate
+	@echo "$(GREEN)✅ Quick setup complete!$(NC)"
 
 ## venv: Create Python virtual environment
 venv:
@@ -45,24 +137,60 @@ venv:
 ## install: Install all Python dependencies
 install: venv
 	@echo "$(BLUE)Installing Python dependencies...$(NC)"
-	@$(PIP) install -r requirements.txt
-	@$(PIP) install -r requirements_monitoring.txt
-	@$(PIP) install -r requirements_traffic.txt
-	@echo "$(GREEN)✅ Dependencies installed$(NC)"
+	@$(PIP) install --upgrade pip
+	@$(PIP) install -r requirements_all.txt
+	@echo "$(GREEN)✅ All dependencies installed$(NC)"
 
-## pull-model: Pull the phi3:mini model for Ollama
+## pull-model: Pull and verify phi3:mini model for Ollama
 pull-model:
-	@echo "$(BLUE)Pulling phi3:mini model...$(NC)"
-	@ollama pull phi3:mini
-	@echo "$(GREEN)✅ Model pulled$(NC)"
+	@echo "$(BLUE)Checking if phi3:mini model is available...$(NC)"
+	@if ollama list | grep -q "phi3:mini"; then \
+		echo "$(GREEN)✅ phi3:mini model already available$(NC)"; \
+	else \
+		echo "$(YELLOW)Downloading phi3:mini model (this may take a few minutes)...$(NC)"; \
+		if ! ollama serve > /dev/null 2>&1 & OLLAMA_PID=$$!; then \
+			echo "$(RED)❌ Failed to start Ollama$(NC)"; \
+			exit 1; \
+		fi; \
+		sleep 3; \
+		if ollama pull phi3:mini; then \
+			echo "$(GREEN)✅ phi3:mini model downloaded successfully$(NC)"; \
+		else \
+			echo "$(RED)❌ Failed to download phi3:mini model$(NC)"; \
+			kill $$OLLAMA_PID 2>/dev/null || true; \
+			exit 1; \
+		fi; \
+		kill $$OLLAMA_PID 2>/dev/null || true; \
+	fi
 
-## start: Start all monitoring services
-start: start-ollama start-proxy start-prometheus
-	@echo "$(GREEN)✅ All services started$(NC)"
-	@echo "$(BLUE)Metrics available at:$(NC) http://localhost:8001/metrics"
-	@echo "$(BLUE)Prometheus UI at:$(NC) http://localhost:9090"
+## start: Start all monitoring services with dashboard
+start: start-ollama start-proxy start-litellm start-portkey start-prometheus start-dashboard
+	@echo "$(GREEN)🚀 All services started successfully!$(NC)"
+	@echo ""
+	@echo "$(BLUE)📊 Dashboard:$(NC)        http://localhost:3001"
+	@echo "$(BLUE)📈 Prometheus UI:$(NC)    http://localhost:9090"
+	@echo "$(BLUE)🔧 Metrics API:$(NC)      http://localhost:8001/metrics"
+	@echo "$(BLUE)🤖 Ollama API:$(NC)       http://localhost:11434"
+	@echo "$(BLUE)🔄 LiteLLM Proxy:$(NC)    http://localhost:8000"
+	@echo "$(BLUE)🚪 Portkey Gateway:$(NC)  http://localhost:8787"
+	@echo ""
+	@echo "$(YELLOW)💡 Pro tip: Run 'make traffic' to generate test traffic$(NC)"
 
-## start-ollama: Start Ollama service
+## start-with-portkey: Start all services with Portkey-enabled monitoring proxy
+start-with-portkey: start-ollama start-proxy-portkey start-litellm start-portkey start-prometheus start-dashboard
+	@echo "$(GREEN)🚀 All services with Portkey integration started!$(NC)"
+	@echo ""
+	@echo "$(BLUE)📊 Dashboard:$(NC)        http://localhost:3001"
+	@echo "$(BLUE)📈 Prometheus UI:$(NC)    http://localhost:9090"
+	@echo "$(BLUE)🔧 Metrics API:$(NC)      http://localhost:8001/metrics"
+	@echo "$(BLUE)🤖 Ollama API:$(NC)       http://localhost:11434"
+	@echo "$(BLUE)🔄 LiteLLM Proxy:$(NC)    http://localhost:8000"
+	@echo "$(BLUE)🚪 Portkey Gateway:$(NC)  http://localhost:8787"
+	@echo ""
+	@echo "$(YELLOW)🌟 Portkey routing enabled! Traffic to proxy (11435) routes through Portkey$(NC)"
+	@echo "$(YELLOW)💡 Run 'make traffic' to test the integrated stack$(NC)"
+
+## start-ollama: Start Ollama service and monitoring instance
 start-ollama:
 	@if ! pgrep -x "ollama" > /dev/null; then \
 		echo "$(BLUE)Starting Ollama...$(NC)"; \
@@ -72,6 +200,8 @@ start-ollama:
 	else \
 		echo "$(YELLOW)Ollama is already running$(NC)"; \
 	fi
+	@echo "$(BLUE)Starting dedicated monitoring Ollama instance...$(NC)"
+	@bash scripts/start_monitoring_ollama.sh
 
 ## start-proxy: Start the monitoring proxy
 start-proxy: venv
@@ -84,17 +214,28 @@ start-proxy: venv
 		echo "$(YELLOW)Monitoring proxy is already running$(NC)"; \
 	fi
 
+## start-proxy-portkey: Start the monitoring proxy with Portkey routing
+start-proxy-portkey: venv
+	@if ! pgrep -f "ollama_monitoring_proxy_fixed.py" > /dev/null; then \
+		echo "$(BLUE)Starting monitoring proxy with Portkey routing...$(NC)"; \
+		$(PYTHON) ollama_monitoring_proxy_fixed.py --enable-portkey > proxy_portkey.log 2>&1 & \
+		sleep 2; \
+		echo "$(GREEN)✅ Monitoring proxy with Portkey routing started$(NC)"; \
+	else \
+		echo "$(YELLOW)Monitoring proxy is already running$(NC)"; \
+	fi
+
 ## start-prometheus: Start Prometheus
 start-prometheus:
 	@if ! (podman ps 2>/dev/null | grep -q prometheus); then \
 		echo "$(BLUE)Starting Prometheus container...$(NC)"; \
-		./run_prometheus.sh; \
+		./scripts/run_prometheus.sh; \
 	else \
 		echo "$(YELLOW)Prometheus container is already running$(NC)"; \
 	fi
 
 ## stop: Stop all monitoring services
-stop: stop-proxy stop-prometheus
+stop: stop-proxy stop-litellm stop-portkey stop-monitoring-ollama stop-prometheus
 	@echo "$(GREEN)✅ All monitoring services stopped$(NC)"
 
 ## stop-proxy: Stop the monitoring proxy
@@ -102,6 +243,60 @@ stop-proxy:
 	@echo "$(BLUE)Stopping monitoring proxy...$(NC)"
 	@pkill -f "ollama_monitoring_proxy" || true
 	@echo "$(GREEN)✅ Monitoring proxy stopped$(NC)"
+
+## stop-monitoring-ollama: Stop the dedicated monitoring Ollama instance
+stop-monitoring-ollama:
+	@echo "$(BLUE)Stopping monitoring Ollama instance...$(NC)"
+	@lsof -ti:11435 | xargs kill -9 2>/dev/null || true
+	@echo "$(GREEN)✅ Monitoring Ollama instance stopped$(NC)"
+
+## start-litellm: Start LiteLLM proxy with priority queues
+start-litellm: venv
+	@if ! lsof -ti:8000 > /dev/null 2>&1; then \
+		echo "$(BLUE)Starting LiteLLM proxy...$(NC)"; \
+		bash scripts/start_litellm_proxy.sh; \
+	else \
+		echo "$(YELLOW)LiteLLM proxy is already running on port 8000$(NC)"; \
+	fi
+
+## stop-litellm: Stop LiteLLM proxy
+stop-litellm:
+	@echo "$(BLUE)Stopping LiteLLM proxy...$(NC)"
+	@lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+	@pkill -f "litellm" || true
+	@echo "$(GREEN)✅ LiteLLM proxy stopped$(NC)"
+
+## start-portkey: Start Portkey Gateway with Docker Compose
+start-portkey:
+	@if ! lsof -ti:8787 > /dev/null 2>&1; then \
+		echo "$(BLUE)Starting Portkey Gateway...$(NC)"; \
+		if command -v podman-compose >/dev/null 2>&1; then \
+			podman-compose -f portkey-compose.yaml up -d; \
+		elif command -v docker-compose >/dev/null 2>&1; then \
+			docker-compose -f portkey-compose.yaml up -d; \
+		elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
+			docker compose -f portkey-compose.yaml up -d; \
+		else \
+			echo "$(RED)❌ Neither Docker nor Podman Compose found$(NC)"; \
+			exit 1; \
+		fi; \
+		echo "$(GREEN)✅ Portkey Gateway started at http://localhost:8787$(NC)"; \
+	else \
+		echo "$(YELLOW)Portkey Gateway is already running on port 8787$(NC)"; \
+	fi
+
+## stop-portkey: Stop Portkey Gateway
+stop-portkey:
+	@echo "$(BLUE)Stopping Portkey Gateway...$(NC)"
+	@if command -v podman-compose >/dev/null 2>&1; then \
+		podman-compose -f portkey-compose.yaml down 2>/dev/null || true; \
+	elif command -v docker-compose >/dev/null 2>&1; then \
+		docker-compose -f portkey-compose.yaml down 2>/dev/null || true; \
+	elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
+		docker compose -f portkey-compose.yaml down 2>/dev/null || true; \
+	fi
+	@lsof -ti:8787 | xargs kill -9 2>/dev/null || true
+	@echo "$(GREEN)✅ Portkey Gateway stopped$(NC)"
 
 ## stop-prometheus: Stop Prometheus
 stop-prometheus:
@@ -127,6 +322,16 @@ status:
 	else \
 		echo "$(RED)❌ Monitoring Proxy: Not running$(NC)"; \
 	fi
+	@if lsof -ti:8000 > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ LiteLLM Proxy: Running$(NC)"; \
+	else \
+		echo "$(RED)❌ LiteLLM Proxy: Not running$(NC)"; \
+	fi
+	@if lsof -ti:8787 > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Portkey Gateway: Running$(NC)"; \
+	else \
+		echo "$(RED)❌ Portkey Gateway: Not running$(NC)"; \
+	fi
 	@if pgrep -x "prometheus" > /dev/null; then \
 		echo "$(GREEN)✅ Prometheus: Running (native)$(NC)"; \
 	elif (podman ps 2>/dev/null || docker ps 2>/dev/null) | grep -q prometheus; then \
@@ -138,7 +343,11 @@ status:
 ## logs: Tail all service logs
 logs:
 	@echo "$(BLUE)Tailing logs (Ctrl+C to stop)...$(NC)"
-	@tail -f proxy.log prometheus.log ollama.log 2>/dev/null || echo "$(YELLOW)No log files found$(NC)"
+	@tail -f proxy.log prometheus.log ollama.log litellm.log 2>/dev/null || echo "$(YELLOW)No log files found$(NC)"
+
+## logs-litellm: Tail LiteLLM proxy logs
+logs-litellm:
+	@tail -f litellm.log 2>/dev/null || echo "$(YELLOW)No LiteLLM logs found$(NC)"
 
 ## logs-proxy: Tail proxy logs
 logs-proxy:
@@ -146,24 +355,39 @@ logs-proxy:
 
 ## traffic: Generate traffic (interactive mode)
 traffic: venv
-	@./run_traffic_generator.sh
+	@./scripts/run_traffic_generator.sh
 
 ## traffic-quick: Quick traffic test (10 requests)
 traffic-quick: venv
-	@./run_traffic_generator.sh --quick
+	@./scripts/run_traffic_generator.sh --quick
 
 ## traffic-demo: Demo traffic (50 requests)
 traffic-demo: venv
-	@./run_traffic_generator.sh --demo
+	@./scripts/run_traffic_generator.sh --demo
 
 ## traffic-stress: Stress test (1000 requests)
 traffic-stress: venv
-	@./run_traffic_generator.sh --stress
+	@./scripts/run_traffic_generator.sh --stress
 
 ## traffic-continuous: Continuous traffic generation
 traffic-continuous: venv
 	@echo "$(BLUE)Starting continuous traffic generation...$(NC)"
 	@./generate_traffic.sh
+
+## traffic-portkey: Generate mixed traffic through Portkey Gateway and monitoring proxy
+traffic-portkey: venv
+	@echo "$(BLUE)Generating mixed Portkey traffic...$(NC)"
+	@$(PYTHON) portkey_traffic_generator.py --requests 20 --delay 2.0 --mode mixed
+
+## traffic-portkey-direct: Generate traffic directly to Portkey Gateway
+traffic-portkey-direct: venv
+	@echo "$(BLUE)Generating direct traffic to Portkey Gateway...$(NC)"
+	@$(PYTHON) portkey_traffic_generator.py --requests 15 --delay 1.5 --mode portkey
+
+## traffic-portkey-proxy: Generate traffic through monitoring proxy to Portkey
+traffic-portkey-proxy: venv
+	@echo "$(BLUE)Generating traffic through monitoring proxy to Portkey...$(NC)"
+	@$(PYTHON) portkey_traffic_generator.py --requests 15 --delay 1.5 --mode proxy
 
 ## metrics: Show current metrics
 metrics:
@@ -174,6 +398,16 @@ metrics:
 health:
 	@echo "$(BLUE)Checking monitoring proxy health...$(NC)"
 	@curl -s http://localhost:8001/health | jq . || echo "$(RED)❌ Proxy not responding$(NC)"
+
+## health-litellm: Check LiteLLM proxy health
+health-litellm:
+	@echo "$(BLUE)Checking LiteLLM proxy health...$(NC)"
+	@curl -s http://localhost:8000/health | jq . || echo "$(RED)❌ LiteLLM proxy not responding$(NC)"
+
+## health-portkey: Check Portkey Gateway health
+health-portkey:
+	@echo "$(BLUE)Checking Portkey Gateway health...$(NC)"
+	@curl -s http://localhost:8787/health | jq . || echo "$(RED)❌ Portkey Gateway not responding$(NC)"
 
 ## prometheus-ui: Open Prometheus UI in browser
 prometheus-ui:
@@ -203,7 +437,7 @@ validate: lint
 	else \
 		echo "$(RED)❌ Virtual environment missing$(NC)"; \
 	fi
-	@if [ -f "prometheus_config.yml" ]; then \
+	@if [ -f "docs/prometheus_config.yml" ]; then \
 		echo "$(GREEN)✅ Prometheus config exists$(NC)"; \
 	else \
 		echo "$(RED)❌ Prometheus config missing$(NC)"; \
@@ -278,7 +512,7 @@ watch-metrics:
 benchmark: venv
 	@echo "$(BLUE)Running performance benchmark...$(NC)"
 	@$(PYTHON) -c "print('Starting benchmark with 100 requests...')"
-	@./run_traffic_generator.sh --quick
+	@./scripts/run_traffic_generator.sh --quick
 	@sleep 2
 	@make metrics
 
@@ -322,12 +556,12 @@ install-dashboard: venv
 ## load-test: Interactive high-performance load testing scenarios
 load-test: venv
 	@echo "$(BLUE)Starting High-Performance Load Testing...$(NC)"
-	@./load_test_scenarios.sh
+	@./scripts/load_test_scenarios.sh
 
 ## load-test-quick: Quick safe load test (2 minutes)
 load-test-quick: venv
 	@echo "$(BLUE)Running Quick Load Test...$(NC)"
-	@$(PYTHON) high_performance_load_tester.py \
+	@$(PYTHON) scripts/high_performance_load_tester.py \
 		--pattern constant \
 		--rps 3.0 \
 		--concurrent 5 \
@@ -338,7 +572,7 @@ load-test-quick: venv
 load-test-queue: venv
 	@echo "$(BLUE)Running Queue Stress Test...$(NC)"
 	@echo "$(YELLOW)Watch queue metrics at http://localhost:3001$(NC)"
-	@$(PYTHON) high_performance_load_tester.py \
+	@$(PYTHON) scripts/high_performance_load_tester.py \
 		--pattern constant \
 		--rps 25.0 \
 		--concurrent 5 \
@@ -348,7 +582,7 @@ load-test-queue: venv
 ## load-test-burst: Burst load test with periodic spikes
 load-test-burst: venv
 	@echo "$(BLUE)Running Burst Load Test...$(NC)"
-	@$(PYTHON) high_performance_load_tester.py \
+	@$(PYTHON) scripts/high_performance_load_tester.py \
 		--pattern burst \
 		--rps 20.0 \
 		--concurrent 5 \
@@ -360,7 +594,7 @@ load-test-burst: venv
 ## load-test-chaos: Chaotic random load pattern
 load-test-chaos: venv
 	@echo "$(BLUE)Running Chaos Load Test...$(NC)"
-	@$(PYTHON) high_performance_load_tester.py \
+	@$(PYTHON) scripts/high_performance_load_tester.py \
 		--pattern chaos \
 		--rps 20.0 \
 		--concurrent 5 \
