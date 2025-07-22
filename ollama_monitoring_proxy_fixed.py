@@ -31,8 +31,13 @@ class OllamaMonitoringProxy:
         # Initialize metrics
         self._init_metrics()
 
-        # Track queue size
+        # Track queue metrics
         self.queue_size = 0
+        self.request_queue = asyncio.Queue()
+        self.queue_semaphore = asyncio.Semaphore(10)  # Limit concurrent requests
+        self.request_timestamps = {}  # Track when requests were queued
+        self.processed_requests_count = 0
+        self.last_processing_rate_update = time.time()
 
     def _init_metrics(self):
         """Initialize Prometheus metrics"""
@@ -143,6 +148,28 @@ class OllamaMonitoringProxy:
             'ollama_proxy_queue_size',
             'Current request queue size'
         )
+        
+        self.queue_wait_time = Histogram(
+            'ollama_proxy_queue_wait_seconds',
+            'Time requests spend waiting in queue',
+            ['model'],
+            buckets=(0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
+        )
+        
+        self.queue_processing_rate = Gauge(
+            'ollama_proxy_queue_processing_rate',
+            'Requests processed per second from queue'
+        )
+        
+        self.max_queue_size = Gauge(
+            'ollama_proxy_max_queue_size',
+            'Maximum queue size observed'
+        )
+        
+        self.queue_rejections = Counter(
+            'ollama_proxy_queue_rejections_total',
+            'Total number of requests rejected due to full queue'
+        )
 
         # macOS GPU and power metrics
         self.gpu_active_residency = Gauge(
@@ -211,10 +238,42 @@ class OllamaMonitoringProxy:
                 logger.error(f"Error reading request body: {e}")
                 body_json = {}
 
-        # Update active requests
-        self.active_requests.labels(model=model).inc()
+        # Track request entry to queue
+        request_id = id(request)  # Unique identifier for this request
+        queue_entry_time = time.time()
+        self.request_timestamps[request_id] = queue_entry_time
+        
+        # Update queue size before acquiring semaphore
+        self.queue_size += 1
+        self.queue_size_gauge.set(self.queue_size)
+        
+        # Update max queue size if needed
+        if hasattr(self, '_max_queue_seen'):
+            if self.queue_size > self._max_queue_seen:
+                self._max_queue_seen = self.queue_size
+                self.max_queue_size.set(self._max_queue_seen)
+        else:
+            self._max_queue_seen = self.queue_size
+            self.max_queue_size.set(self._max_queue_seen)
+        
+        # Acquire semaphore to limit concurrent requests
+        await self.queue_semaphore.acquire()
 
         try:
+            # Request is now leaving the queue and starting processing
+            processing_start_time = time.time()
+            queue_wait_time = processing_start_time - queue_entry_time
+            
+            # Update queue metrics
+            self.queue_size -= 1
+            self.queue_size_gauge.set(self.queue_size)
+            self.queue_wait_time.labels(model=model).observe(queue_wait_time)
+            
+            # Update active requests (now we're actually processing)
+            self.active_requests.labels(model=model).inc()
+            
+            # Clean up request timestamp tracking
+            self.request_timestamps.pop(request_id, None)
             # Create a new session for the proxy request
             async with aiohttp.ClientSession() as session:
                 url = f"{self.ollama_url}{path}"
@@ -289,7 +348,15 @@ class OllamaMonitoringProxy:
             self.error_count.labels(model=model, error_type='proxy_error').inc()
             return web.Response(status=502, text=f"Bad Gateway: {str(e)}")
         finally:
+            # Decrement active requests and release semaphore
             self.active_requests.labels(model=model).dec()
+            self.queue_semaphore.release()
+            
+            # Increment processed requests counter for processing rate calculation
+            self.processed_requests_count += 1
+            
+            # Clean up any remaining request timestamp tracking
+            self.request_timestamps.pop(request_id, None)
 
     async def _handle_streaming_response(self, resp, request, model, start_time, path):
         """Handle streaming responses from Ollama"""
@@ -513,6 +580,18 @@ class OllamaMonitoringProxy:
 
                 # Queue size
                 self.queue_size_gauge.set(self.queue_size)
+                
+                # Calculate processing rate (requests per second)
+                current_time = time.time()
+                time_elapsed = current_time - self.last_processing_rate_update
+                if time_elapsed >= 10:  # Update every 10 seconds
+                    requests_processed_in_period = self.processed_requests_count
+                    processing_rate = requests_processed_in_period / time_elapsed
+                    self.queue_processing_rate.set(processing_rate)
+                    
+                    # Reset counters
+                    self.processed_requests_count = 0
+                    self.last_processing_rate_update = current_time
 
                 # macOS-specific metrics (collected less frequently to reduce overhead)
                 if platform.system() == 'Darwin':

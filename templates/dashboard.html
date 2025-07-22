@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ollama LLM Dashboard</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <style>
+        .metric-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid;
+        }
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .metric-value {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .metric-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .status-healthy { background-color: #28a745; }
+        .status-warning { background-color: #ffc107; }
+        .status-error { background-color: #dc3545; }
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        .last-updated {
+            color: #6c757d;
+            font-size: 0.8rem;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card-success { border-left-color: #28a745; }
+        .card-primary { border-left-color: #007bff; }
+        .card-warning { border-left-color: #ffc107; }
+        .card-info { border-left-color: #17a2b8; }
+        .card-danger { border-left-color: #dc3545; }
+        .vr {
+            width: 1px;
+            background-color: rgba(255, 255, 255, 0.4);
+            height: 24px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-cpu"></i> Ollama LLM Dashboard
+            </a>
+            <span class="navbar-text">
+                <div class="d-flex align-items-center">
+                    <div id="ollama-status" class="d-flex align-items-center me-3">
+                        <i class="bi bi-server me-1"></i>
+                        <span class="badge bg-secondary me-2">Unknown</span>
+                        <small class="text-white-50" id="ollama-response-time"></small>
+                    </div>
+                    <div class="vr mx-2"></div>
+                    <span id="connection-status">
+                        <span class="status-indicator status-healthy"></span>
+                        Connected
+                    </span>
+                </div>
+            </span>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-4">
+        <!-- AI Status Banner -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="alert alert-info mb-0" role="alert">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-robot me-2 mt-1"></i>
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div class="d-flex align-items-center">
+                                    <strong class="me-2">System Status:</strong>
+                                    <span id="status-mode" class="badge bg-secondary" style="font-size: 0.7rem;">--</span>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <small class="text-muted me-2" id="status-timestamp">
+                                        Updated at --
+                                    </small>
+                                    <button class="btn btn-outline-primary btn-sm" id="refresh-status" title="Refresh Status">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="ai-status" class="mt-1" style="line-height: 1.4;">Initializing monitoring...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Metrics Row -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card metric-card card-primary h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="request-rate">0.0</div>
+                        <div class="metric-label">
+                            <i class="bi bi-speedometer2"></i> Requests/sec
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card metric-card card-info h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="avg-latency">0.0</div>
+                        <div class="metric-label">
+                            <i class="bi bi-clock"></i> Avg Latency (s)
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card metric-card card-success h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="success-rate">100.0%</div>
+                        <div class="metric-label">
+                            <i class="bi bi-check-circle"></i> Success Rate
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card metric-card card-warning h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="tokens-per-sec">0.0</div>
+                        <div class="metric-label">
+                            <i class="bi bi-textarea-t"></i> Tokens/sec
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Metrics Row -->
+        <div class="row mb-4">
+            <div class="col-md-2 mb-3">
+                <div class="card metric-card card-danger h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="gpu-util">0.0%</div>
+                        <div class="metric-label">
+                            <i class="bi bi-gpu-card"></i> GPU Usage
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <div class="card metric-card card-warning h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="power-usage">0.0W</div>
+                        <div class="metric-label">
+                            <i class="bi bi-lightning"></i> Power
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <div class="card metric-card card-info h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="memory-usage">0.0</div>
+                        <div class="metric-label">
+                            <i class="bi bi-memory"></i> Memory (MB)
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2 mb-3">
+                <div class="card metric-card card-primary h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="active-requests">0</div>
+                        <div class="metric-label">
+                            <i class="bi bi-activity"></i> Active Req.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Queue Metrics Row -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card metric-card card-warning h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="queue-size">0</div>
+                        <div class="metric-label">
+                            <i class="bi bi-hourglass-split"></i> Queue Size
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card metric-card card-info h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="queue-processing-rate">0.0</div>
+                        <div class="metric-label">
+                            <i class="bi bi-speedometer"></i> Queue Rate/sec
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card metric-card card-danger h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="max-queue-size">0</div>
+                        <div class="metric-label">
+                            <i class="bi bi-graph-up-arrow"></i> Peak Queue
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card metric-card card-success h-100">
+                    <div class="card-body text-center">
+                        <div class="metric-value" id="queue-efficiency">100%</div>
+                        <div class="metric-label">
+                            <i class="bi bi-check-circle"></i> Queue Efficiency
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-bar-chart"></i> Latency Percentiles</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-3">
+                                <div class="h5 mb-0" id="p50">0.0s</div>
+                                <small class="text-muted">P50</small>
+                            </div>
+                            <div class="col-3">
+                                <div class="h5 mb-0" id="p75">0.0s</div>
+                                <small class="text-muted">P75</small>
+                            </div>
+                            <div class="col-3">
+                                <div class="h5 mb-0" id="p95">0.0s</div>
+                                <small class="text-muted">P95</small>
+                            </div>
+                            <div class="col-3">
+                                <div class="h5 mb-0" id="p99">0.0s</div>
+                                <small class="text-muted">P99</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                        <h6 class="mb-0"><i class="bi bi-graph-up"></i> Token Generation Rate</h6>
+                        <small class="text-muted">Last Hour</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="tokensChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                        <h6 class="mb-0"><i class="bi bi-memory"></i> Memory Usage</h6>
+                        <small class="text-muted">Last Hour</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="memoryChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                        <h6 class="mb-0"><i class="bi bi-gpu-card"></i> GPU Utilization</h6>
+                        <small class="text-muted">Last Hour</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="gpuChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                        <h6 class="mb-0"><i class="bi bi-lightning"></i> Power Consumption</h6>
+                        <small class="text-muted">Last Hour</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="powerChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Queue Visualization Charts -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                        <h6 class="mb-0"><i class="bi bi-hourglass-split"></i> Request Queue Size</h6>
+                        <small class="text-muted">Last Hour</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="queueSizeChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between">
+                        <h6 class="mb-0"><i class="bi bi-speedometer"></i> Queue Processing Rate</h6>
+                        <small class="text-muted">Last Hour</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container">
+                            <canvas id="queueRateChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="row">
+            <div class="col-12 text-center">
+                <small class="last-updated">
+                    Last updated: <span id="last-updated">--</span>
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Socket.IO connection
+        const socket = io();
+        
+        // Chart configurations
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        displayFormats: {
+                            minute: 'HH:mm',
+                            hour: 'HH:mm'
+                        }
+                    },
+                    grid: {
+                        display: true,
+                        color: 'rgba(0,0,0,0.1)'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        display: true,
+                        color: 'rgba(0,0,0,0.1)'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        };
+
+        // Initialize charts
+        const tokensChart = new Chart(document.getElementById('tokensChart'), {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Tokens/sec',
+                    data: [],
+                    borderColor: '#ffc107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: chartOptions
+        });
+
+        const memoryChart = new Chart(document.getElementById('memoryChart'), {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Memory (MB)',
+                    data: [],
+                    borderColor: '#17a2b8',
+                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: chartOptions
+        });
+
+        const gpuChart = new Chart(document.getElementById('gpuChart'), {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'GPU Utilization (%)',
+                    data: [],
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: chartOptions
+        });
+
+        const powerChart = new Chart(document.getElementById('powerChart'), {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Power (W)',
+                    data: [],
+                    borderColor: '#ffc107',
+                    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: chartOptions
+        });
+
+        // Queue charts
+        const queueSizeChart = new Chart(document.getElementById('queueSizeChart'), {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Queue Size',
+                    data: [],
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    fill: true,
+                    tension: 0.1,
+                    stepped: true
+                }]
+            },
+            options: chartOptions
+        });
+
+        const queueRateChart = new Chart(document.getElementById('queueRateChart'), {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Processing Rate (req/s)',
+                    data: [],
+                    borderColor: '#17a2b8',
+                    backgroundColor: 'rgba(23, 162, 184, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: chartOptions
+        });
+
+        // Update metric displays
+        function updateMetrics(data) {
+            const summary = data.summary;
+            const percentiles = data.latency_percentiles;
+            
+            // Helper function to handle null/NaN values
+            function safeNumber(value, decimals = 2) {
+                if (value === null || value === undefined || isNaN(value)) {
+                    return '0.' + '0'.repeat(decimals);
+                }
+                return value.toFixed(decimals);
+            }
+            
+            // Update Ollama status
+            if (summary.ollama_status) {
+                const statusBadge = document.querySelector('#ollama-status .badge');
+                const responseTime = document.getElementById('ollama-response-time');
+                
+                // Update status badge
+                statusBadge.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-secondary');
+                
+                switch(summary.ollama_status.status) {
+                    case 'healthy':
+                        statusBadge.classList.add('bg-success');
+                        statusBadge.textContent = 'Healthy';
+                        break;
+                    case 'unhealthy':
+                        statusBadge.classList.add('bg-warning');
+                        statusBadge.textContent = 'Unhealthy';
+                        break;
+                    case 'offline':
+                    case 'timeout':
+                        statusBadge.classList.add('bg-danger');
+                        statusBadge.textContent = 'Offline';
+                        break;
+                    default:
+                        statusBadge.classList.add('bg-secondary');
+                        statusBadge.textContent = 'Unknown';
+                }
+                
+                // Update response time
+                if (summary.ollama_status.response_time !== null) {
+                    responseTime.textContent = `${summary.ollama_status.response_time}ms`;
+                } else {
+                    responseTime.textContent = '';
+                }
+            }
+            
+            // Update summary metrics
+            document.getElementById('request-rate').textContent = safeNumber(summary.request_rate, 2);
+            document.getElementById('avg-latency').textContent = safeNumber(summary.avg_latency, 2);
+            document.getElementById('success-rate').textContent = safeNumber(summary.success_rate, 1) + '%';
+            document.getElementById('tokens-per-sec').textContent = safeNumber(summary.tokens_per_second, 1);
+            
+            document.getElementById('gpu-util').textContent = safeNumber(summary.gpu_utilization, 1) + '%';
+            document.getElementById('power-usage').textContent = safeNumber(summary.power_consumption, 1) + 'W';
+            document.getElementById('memory-usage').textContent = safeNumber(summary.memory_usage, 1);
+            document.getElementById('active-requests').textContent = summary.active_requests || 0;
+            
+            // Update queue metrics
+            document.getElementById('queue-size').textContent = summary.queue_size || 0;
+            document.getElementById('queue-processing-rate').textContent = safeNumber(summary.queue_processing_rate, 2);
+            document.getElementById('max-queue-size').textContent = summary.max_queue_size || 0;
+            
+            // Calculate queue efficiency (processed vs queued)
+            const queueEfficiency = summary.queue_size > 0 ? 
+                Math.max(0, Math.min(100, (summary.queue_processing_rate * 100 / Math.max(1, summary.queue_size)))) : 100;
+            document.getElementById('queue-efficiency').textContent = safeNumber(queueEfficiency, 0) + '%';
+            
+            // Update percentiles
+            document.getElementById('p50').textContent = safeNumber(percentiles.p50, 2) + 's';
+            document.getElementById('p75').textContent = safeNumber(percentiles.p75, 2) + 's';
+            document.getElementById('p95').textContent = safeNumber(percentiles.p95, 2) + 's';
+            document.getElementById('p99').textContent = safeNumber(percentiles.p99, 2) + 's';
+            
+            // Update last updated time
+            document.getElementById('last-updated').textContent = new Date(data.timestamp).toLocaleTimeString();
+        }
+
+        // Load time series data
+        function loadTimeSeriesData() {
+            fetch('/api/metrics/timeseries')
+                .then(response => response.json())
+                .then(data => {
+                    const series = data.data;
+                    
+                    // Update token chart
+                    tokensChart.data.datasets[0].data = series.tokens_per_second || [];
+                    tokensChart.update('none');
+                    
+                    // Update memory chart
+                    memoryChart.data.datasets[0].data = series.memory_usage || [];
+                    memoryChart.update('none');
+                    
+                    // Update GPU chart
+                    gpuChart.data.datasets[0].data = series.gpu_utilization || [];
+                    gpuChart.update('none');
+                    
+                    // Update power chart
+                    powerChart.data.datasets[0].data = series.power_consumption || [];
+                    powerChart.update('none');
+                    
+                    // Update queue charts
+                    queueSizeChart.data.datasets[0].data = series.queue_size || [];
+                    queueSizeChart.update('none');
+                    
+                    queueRateChart.data.datasets[0].data = series.queue_processing_rate || [];
+                    queueRateChart.update('none');
+                })
+                .catch(error => {
+                    console.error('Error loading time series data:', error);
+                });
+        }
+
+        // Socket event handlers
+        socket.on('connect', function() {
+            console.log('Connected to dashboard');
+            document.getElementById('connection-status').innerHTML = 
+                '<span class="status-indicator status-healthy"></span>Connected';
+        });
+
+        socket.on('disconnect', function() {
+            console.log('Disconnected from dashboard');
+            document.getElementById('connection-status').innerHTML = 
+                '<span class="status-indicator status-error"></span>Disconnected';
+        });
+
+        socket.on('metrics_update', function(data) {
+            updateMetrics(data);
+            
+            // Update AI status if provided
+            if (data.ai_status) {
+                console.log('Received AI status:', data.ai_status, 'AI Generated:', data.is_ai_generated);
+                document.getElementById('ai-status').textContent = data.ai_status;
+                document.getElementById('status-timestamp').innerHTML = 
+                    'Updated at ' + new Date().toLocaleTimeString();
+                
+                // Update status mode badge
+                const statusModeBadge = document.getElementById('status-mode');
+                if (data.is_ai_generated === false) {
+                    statusModeBadge.textContent = 'High Load Mode';
+                    statusModeBadge.classList.remove('bg-success', 'bg-secondary');
+                    statusModeBadge.classList.add('bg-warning');
+                } else {
+                    statusModeBadge.textContent = 'AI Analysis';
+                    statusModeBadge.classList.remove('bg-warning', 'bg-secondary');
+                    statusModeBadge.classList.add('bg-success');
+                }
+            } else {
+                console.log('No AI status in data:', Object.keys(data));
+            }
+        });
+
+        // Initial load
+        loadTimeSeriesData();
+        
+        // Load initial AI status
+        function loadAIStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status) {
+                        document.getElementById('ai-status').textContent = data.status;
+                        document.getElementById('status-timestamp').innerHTML = 
+                            'Updated at ' + new Date().toLocaleTimeString();
+                        console.log('AI status loaded:', data.status, 'AI Generated:', data.is_ai_generated);
+                        
+                        // Update status mode badge
+                        const statusModeBadge = document.getElementById('status-mode');
+                        if (data.is_ai_generated === false) {
+                            statusModeBadge.textContent = 'High Load Mode';
+                            statusModeBadge.classList.remove('bg-success', 'bg-secondary');
+                            statusModeBadge.classList.add('bg-warning');
+                        } else {
+                            statusModeBadge.textContent = 'AI Analysis';
+                            statusModeBadge.classList.remove('bg-warning', 'bg-secondary');
+                            statusModeBadge.classList.add('bg-success');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading AI status:', error);
+                });
+        }
+        
+        loadAIStatus();
+        
+        // Add refresh button click handler
+        document.getElementById('refresh-status').addEventListener('click', function() {
+            // Add loading indicator
+            const button = this;
+            const originalContent = button.innerHTML;
+            button.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+            button.disabled = true;
+            
+            // Load new status
+            loadAIStatus();
+            
+            // Reset button after 2 seconds
+            setTimeout(() => {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }, 2000);
+        });
+        
+        // Refresh time series data every 30 seconds
+        setInterval(loadTimeSeriesData, 30000);
+
+        // Handle window resize
+        window.addEventListener('resize', function() {
+            tokensChart.resize();
+            memoryChart.resize();
+            gpuChart.resize();
+            powerChart.resize();
+            queueSizeChart.resize();
+            queueRateChart.resize();
+        });
+    </script>
+</body>
+</html>

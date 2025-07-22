@@ -50,6 +50,14 @@ make metrics        # Show current metrics
 make logs           # Tail all service logs
 ```
 
+### Dashboard
+```bash
+make dashboard      # Start dashboard (foreground)
+make start-dashboard # Start dashboard (background)
+make stop-dashboard # Stop dashboard
+make install-dashboard # Install dashboard dependencies
+```
+
 ## Python Virtual Environment Requirement
 
 **CRITICAL**: All Python scripts MUST run within the virtual environment at `./venv/`:
@@ -79,12 +87,19 @@ python script.py
    - Tests proxy functionality, streaming, metrics collection
    - Must run in venv: `./venv/bin/python test_ollama_monitoring.py`
 
+4. **dashboard.py** - Real-time web dashboard
+   - Comprehensive LLM performance visualization
+   - Real-time metrics with WebSocket updates
+   - Token generation, memory, GPU, and power graphs
+   - Must run in venv: `./venv/bin/python dashboard.py`
+
 ## Port Configuration
 
 - 11434: Ollama API (default)
 - 11435: Monitoring proxy 
 - 8001: Prometheus metrics endpoint
 - 9090: Prometheus UI
+- 3001: Web dashboard
 - 8000: Alternative metrics server (app.py or enhanced_metrics_server.py)
 
 ## Testing Approach

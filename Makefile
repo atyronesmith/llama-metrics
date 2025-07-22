@@ -290,3 +290,80 @@ install-tools:
 	else \
 		echo "$(YELLOW)Please install: shellcheck jq watch$(NC)"; \
 	fi
+
+## dashboard: Start the web dashboard
+dashboard: venv
+	@echo "$(BLUE)Starting Ollama Dashboard...$(NC)"
+	@$(PYTHON) dashboard.py
+
+## start-dashboard: Start dashboard in background
+start-dashboard: venv
+	@if ! pgrep -f "dashboard.py" > /dev/null; then \
+		echo "$(BLUE)Starting dashboard in background...$(NC)"; \
+		nohup $(PYTHON) dashboard.py > dashboard.log 2>&1 & \
+		sleep 2; \
+		echo "$(GREEN)✅ Dashboard started at http://localhost:3001$(NC)"; \
+	else \
+		echo "$(YELLOW)Dashboard is already running$(NC)"; \
+	fi
+
+## stop-dashboard: Stop dashboard
+stop-dashboard:
+	@echo "$(BLUE)Stopping dashboard...$(NC)"
+	@pkill -f "dashboard.py" || true
+	@echo "$(GREEN)✅ Dashboard stopped$(NC)"
+
+## install-dashboard: Install dashboard dependencies
+install-dashboard: venv
+	@echo "$(BLUE)Installing dashboard dependencies...$(NC)"
+	@$(PIP) install -r requirements_dashboard.txt
+	@echo "$(GREEN)✅ Dashboard dependencies installed$(NC)"
+
+## load-test: Interactive high-performance load testing scenarios
+load-test: venv
+	@echo "$(BLUE)Starting High-Performance Load Testing...$(NC)"
+	@./load_test_scenarios.sh
+
+## load-test-quick: Quick safe load test (2 minutes)
+load-test-quick: venv
+	@echo "$(BLUE)Running Quick Load Test...$(NC)"
+	@$(PYTHON) high_performance_load_tester.py \
+		--pattern constant \
+		--rps 3.0 \
+		--concurrent 5 \
+		--duration 120 \
+		--prompts short
+
+## load-test-queue: Queue stress test for testing queue visualization
+load-test-queue: venv
+	@echo "$(BLUE)Running Queue Stress Test...$(NC)"
+	@echo "$(YELLOW)Watch queue metrics at http://localhost:3001$(NC)"
+	@$(PYTHON) high_performance_load_tester.py \
+		--pattern constant \
+		--rps 25.0 \
+		--concurrent 5 \
+		--requests 500 \
+		--prompts short medium
+
+## load-test-burst: Burst load test with periodic spikes
+load-test-burst: venv
+	@echo "$(BLUE)Running Burst Load Test...$(NC)"
+	@$(PYTHON) high_performance_load_tester.py \
+		--pattern burst \
+		--rps 20.0 \
+		--concurrent 5 \
+		--requests 400 \
+		--burst-size 50 \
+		--burst-interval 10.0 \
+		--prompts short medium long
+
+## load-test-chaos: Chaotic random load pattern
+load-test-chaos: venv
+	@echo "$(BLUE)Running Chaos Load Test...$(NC)"
+	@$(PYTHON) high_performance_load_tester.py \
+		--pattern chaos \
+		--rps 20.0 \
+		--concurrent 5 \
+		--requests 500 \
+		--burst-size 30 \
+		--prompts short medium long
