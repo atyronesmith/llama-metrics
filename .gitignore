@@ -93,3 +93,6 @@ yarn-error.log*
 .secrets
 local_config.py
 .env.local
+
+# Portkey Gateway (external repository)
+portkey-gateway/
