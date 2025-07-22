@@ -1,0 +1,186 @@
+# Ollama Monitoring Stack Configuration
+# This file contains all configurable parameters
+
+# Server Configuration
+server:
+  # Ollama API endpoint
+  ollama_url: "http://localhost:11434"
+  
+  # Monitoring proxy settings
+  proxy_port: 11435
+  proxy_host: "localhost"
+  
+  # Metrics server settings
+  metrics_port: 8001
+  metrics_host: "localhost"
+  
+  # Dashboard settings
+  dashboard_port: 3001
+  dashboard_host: "localhost"
+  
+  # Prometheus settings
+  prometheus_port: 9090
+  prometheus_host: "localhost"
+
+# Model Configuration
+models:
+  # Default model for testing
+  default_model: "phi3:mini"
+  
+  # Available models for load testing
+  available_models:
+    - "phi3:mini"
+    - "llama2"
+    - "codellama"
+
+# Monitoring Configuration
+monitoring:
+  # Metrics collection interval (seconds)
+  metrics_interval: 5
+  
+  # Request timeout (seconds)
+  request_timeout: 30
+  
+  # Max concurrent requests
+  max_concurrent_requests: 10
+  
+  # Queue size limit
+  max_queue_size: 50
+  
+  # Rate limiting
+  rate_limit_per_minute: 60
+  
+  # AI status generation
+  ai_status:
+    enabled: true
+    generation_interval: 15  # seconds
+    timeout: 10              # seconds
+    high_load_threshold:
+      active_requests: 5
+      queue_size: 10
+
+# Load Testing Configuration
+load_testing:
+  # Default patterns
+  patterns:
+    quick:
+      requests: 10
+      rps: 2.0
+      concurrent: 2
+    demo:
+      requests: 50
+      rps: 3.0
+      concurrent: 3
+    stress:
+      requests: 1000
+      rps: 20.0
+      concurrent: 5
+  
+  # Traffic generation
+  traffic:
+    # Question categories for testing
+    categories:
+      - "programming"
+      - "science"
+      - "general_knowledge"
+      - "math"
+      - "creative_writing"
+    
+    # Default prompts
+    default_prompts:
+      short: "What is 2+2?"
+      medium: "Explain the concept of machine learning in simple terms."
+      long: "Write a detailed explanation of how neural networks work, including backpropagation and gradient descent."
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Log files
+  files:
+    proxy: "proxy.log"
+    dashboard: "dashboard.log"
+    ollama: "ollama.log"
+    prometheus: "prometheus.log"
+  
+  # Log rotation
+  max_size: "10MB"
+  backup_count: 5
+
+# Security Configuration
+security:
+  # API keys (set via environment variables)
+  require_api_key: false
+  
+  # CORS settings
+  cors:
+    enabled: true
+    allowed_origins: 
+      - "http://localhost:3001"
+      - "http://127.0.0.1:3001"
+  
+  # Rate limiting
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+
+# Health Check Configuration
+health_check:
+  enabled: true
+  interval: 30  # seconds
+  timeout: 5    # seconds
+  
+  # Endpoints to check
+  endpoints:
+    - name: "ollama"
+      url: "http://localhost:11434/api/tags"
+      critical: true
+    - name: "proxy"
+      url: "http://localhost:11435/health"
+      critical: true
+    - name: "metrics"
+      url: "http://localhost:8001/metrics"
+      critical: false
+
+# Container Configuration
+containers:
+  # Prometheus container settings
+  prometheus:
+    image: "prom/prometheus:latest"
+    config_file: "./docs/prometheus_config.yml"
+    data_retention: "15d"
+    
+  # Future container configurations
+  grafana:
+    image: "grafana/grafana:latest"
+    port: 3000
+
+# Environment-specific overrides
+environments:
+  development:
+    logging:
+      level: "DEBUG"
+    monitoring:
+      metrics_interval: 2
+  
+  production:
+    logging:
+      level: "WARNING"
+    monitoring:
+      max_concurrent_requests: 20
+      max_queue_size: 100
+    security:
+      require_api_key: true
+      rate_limiting:
+        requests_per_minute: 200
+
+# Feature Flags
+features:
+  gpu_monitoring: true
+  power_monitoring: true
+  memory_monitoring: true
+  network_monitoring: true
+  ai_status_generation: true
+  auto_scaling: false
+  alerting: false

@@ -16,6 +16,7 @@ from aiohttp import web
 from prometheus_client import (
     Counter, Histogram, Gauge, Info, generate_latest
 )
+from healthcheck import get_health, get_health_simple, get_readiness, get_liveness
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,10 +24,14 @@ logger = logging.getLogger(__name__)
 
 class OllamaMonitoringProxy:
     def __init__(self, ollama_host='localhost', ollama_port=11434,
-                 proxy_port=11435, metrics_port=8001):
+                 proxy_port=11435, metrics_port=8001, 
+                 portkey_host='localhost', portkey_port=8787,
+                 enable_portkey=False):
         self.ollama_url = f"http://{ollama_host}:{ollama_port}"
+        self.portkey_url = f"http://{portkey_host}:{portkey_port}"
         self.proxy_port = proxy_port
         self.metrics_port = metrics_port
+        self.enable_portkey = enable_portkey
 
         # Initialize metrics
         self._init_metrics()
@@ -45,13 +50,13 @@ class OllamaMonitoringProxy:
         self.request_count = Counter(
             'ollama_proxy_requests_total',
             'Total number of requests',
-            ['method', 'endpoint', 'model', 'status']
+            ['method', 'endpoint', 'model', 'status', 'routing']
         )
 
         self.request_duration = Histogram(
             'ollama_proxy_request_duration_seconds',
             'Request duration in seconds',
-            ['method', 'endpoint', 'model'],
+            ['method', 'endpoint', 'model', 'routing'],
             buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 5.0, 7.5, 10.0, 15.0, 30.0, 45.0, 60.0, 90.0, 120.0, 180.0)
         )
 
@@ -276,7 +281,13 @@ class OllamaMonitoringProxy:
             self.request_timestamps.pop(request_id, None)
             # Create a new session for the proxy request
             async with aiohttp.ClientSession() as session:
-                url = f"{self.ollama_url}{path}"
+                # Choose destination based on Portkey setting
+                if self.enable_portkey:
+                    url = f"{self.portkey_url}{path}"
+                    logger.debug(f"Routing through Portkey: {url}")
+                else:
+                    url = f"{self.ollama_url}{path}"
+                    logger.debug(f"Direct routing to Ollama: {url}")
 
                 # Build the request kwargs
                 kwargs = {
@@ -321,16 +332,18 @@ class OllamaMonitoringProxy:
 
                         # Update request metrics
                         duration = time.time() - start_time
+                        routing_type = "portkey" if self.enable_portkey else "direct"
                         self.request_duration.labels(
-                            method=method, endpoint=path, model=model
+                            method=method, endpoint=path, model=model, routing=routing_type
                         ).observe(duration)
 
                         # Record per-endpoint latency
                         self._record_endpoint_latency(path, duration, model, body_json)
 
+                        routing_type = "portkey" if self.enable_portkey else "direct"
                         self.request_count.labels(
                             method=method, endpoint=path, model=model,
-                            status=resp.status
+                            status=resp.status, routing=routing_type
                         ).inc()
 
                         # Return response
@@ -394,15 +407,17 @@ class OllamaMonitoringProxy:
 
         # Update request metrics
         duration = time.time() - start_time
+        routing_type = "portkey" if self.enable_portkey else "direct"
         self.request_duration.labels(
-            method='POST', endpoint=path, model=model
+            method='POST', endpoint=path, model=model, routing=routing_type
         ).observe(duration)
 
         # Record per-endpoint latency (streaming)
         self._record_endpoint_latency(path, duration, model, {"stream": True})
 
+        routing_type = "portkey" if self.enable_portkey else "direct"
         self.request_count.labels(
-            method='POST', endpoint=path, model=model, status=resp.status
+            method='POST', endpoint=path, model=model, status=resp.status, routing=routing_type
         ).inc()
 
         await response.write_eof()
@@ -642,13 +657,102 @@ class OllamaMonitoringProxy:
             self.show_latency.labels(model=model).observe(duration)
 
     async def health_handler(self, request):
-        """Health check endpoint"""
-        return web.json_response({
-            'status': 'healthy',
-            'proxy_url': f"http://localhost:{self.proxy_port}",
-            'metrics_url': f"http://localhost:{self.metrics_port}/metrics",
-            'ollama_backend': self.ollama_url
-        })
+        """Comprehensive health check endpoint"""
+        try:
+            health_data = await get_health()
+            status_code = 200 if health_data['status'] == 'healthy' else 503
+            return web.json_response(health_data, status=status_code)
+        except Exception as e:
+            logger.error(f"Health check failed: {e}")
+            return web.json_response({
+                'status': 'unhealthy',
+                'error': str(e),
+                'proxy_url': f"http://localhost:{self.proxy_port}",
+                'metrics_url': f"http://localhost:{self.metrics_port}/metrics",
+                'ollama_backend': self.ollama_url
+            }, status=503)
+    
+    async def health_simple_handler(self, request):
+        """Simple health check endpoint (fast response)"""
+        try:
+            health_data = await get_health_simple()
+            status_code = 200 if health_data['status'] == 'healthy' else 503
+            return web.json_response(health_data, status=status_code)
+        except Exception as e:
+            logger.error(f"Simple health check failed: {e}")
+            return web.json_response({
+                'status': 'unhealthy',
+                'error': str(e)
+            }, status=503)
+    
+    async def readiness_handler(self, request):
+        """Readiness check endpoint (for container orchestration)"""
+        try:
+            readiness_data = get_readiness()
+            status_code = 200 if readiness_data['ready'] else 503
+            return web.json_response(readiness_data, status=status_code)
+        except Exception as e:
+            logger.error(f"Readiness check failed: {e}")
+            return web.json_response({
+                'ready': False,
+                'error': str(e)
+            }, status=503)
+    
+    async def liveness_handler(self, request):
+        """Liveness check endpoint (for container orchestration)"""
+        try:
+            liveness_data = get_liveness()
+            status_code = 200 if liveness_data['alive'] else 503
+            return web.json_response(liveness_data, status=status_code)
+        except Exception as e:
+            logger.error(f"Liveness check failed: {e}")
+            return web.json_response({
+                'alive': False,
+                'error': str(e)
+            }, status=503)
+    
+    async def metrics_summary_handler(self, request):
+        """Provide metrics summary in JSON format"""
+        try:
+            from datetime import datetime, timezone
+            import statistics
+            
+            # Get current system metrics
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            memory = psutil.virtual_memory()
+            
+            # Calculate some aggregate metrics
+            summary = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "summary": {
+                    "total_requests": self.processed_requests_count,
+                    "active_requests": self.queue_size,
+                    "queue_size": self.queue_size,
+                    "avg_latency": 0.0,  # Would need to track this
+                    "tokens_per_second": 0.0,  # Would need to calculate from recent samples
+                    "success_rate": 0.95,  # Placeholder - would calculate from metrics
+                    "error_rate": 0.05
+                },
+                "system": {
+                    "cpu_percent": round(cpu_percent, 2),
+                    "memory_percent": round(memory.percent, 2),
+                    "memory_available_gb": round(memory.available / (1024**3), 2),
+                    "memory_used_gb": round(memory.used / (1024**3), 2),
+                    "gpu_utilization_percent": 0.0,  # Placeholder
+                    "power_cpu_watts": 0.0,  # Placeholder
+                    "power_gpu_watts": 0.0   # Placeholder
+                },
+                "models": {
+                    # Would populate with actual model metrics
+                }
+            }
+            
+            return web.json_response(summary)
+        except Exception as e:
+            logger.error(f"Metrics summary failed: {e}")
+            return web.json_response({
+                'error': str(e)
+            }, status=500)
 
     async def start(self):
         """Start the proxy and metrics servers"""
@@ -659,7 +763,13 @@ class OllamaMonitoringProxy:
         # Create metrics app
         metrics_app = web.Application()
         metrics_app.router.add_get('/metrics', self.metrics_handler)
+        metrics_app.router.add_get('/api/metrics/summary', self.metrics_summary_handler)
+        
+        # Health check endpoints
         metrics_app.router.add_get('/health', self.health_handler)
+        metrics_app.router.add_get('/health/simple', self.health_simple_handler)
+        metrics_app.router.add_get('/ready', self.readiness_handler)
+        metrics_app.router.add_get('/live', self.liveness_handler)
 
         # Start system metrics collection
         asyncio.create_task(self.collect_system_metrics())
@@ -687,7 +797,33 @@ class OllamaMonitoringProxy:
         await asyncio.Event().wait()
 
 async def main():
-    proxy = OllamaMonitoringProxy()
+    import argparse
+    parser = argparse.ArgumentParser(description='Ollama Monitoring Proxy')
+    parser.add_argument('--ollama-host', default='localhost', help='Ollama host')
+    parser.add_argument('--ollama-port', type=int, default=11434, help='Ollama port')
+    parser.add_argument('--proxy-port', type=int, default=11435, help='Proxy port')
+    parser.add_argument('--metrics-port', type=int, default=8001, help='Metrics port')
+    parser.add_argument('--portkey-host', default='localhost', help='Portkey host')
+    parser.add_argument('--portkey-port', type=int, default=8787, help='Portkey port')
+    parser.add_argument('--enable-portkey', action='store_true', help='Route traffic through Portkey')
+    
+    args = parser.parse_args()
+    
+    proxy = OllamaMonitoringProxy(
+        ollama_host=args.ollama_host,
+        ollama_port=args.ollama_port,
+        proxy_port=args.proxy_port,
+        metrics_port=args.metrics_port,
+        portkey_host=args.portkey_host,
+        portkey_port=args.portkey_port,
+        enable_portkey=args.enable_portkey
+    )
+    
+    if args.enable_portkey:
+        logger.info(f"🚪 Portkey routing enabled - forwarding to {proxy.portkey_url}")
+    else:
+        logger.info(f"🎯 Direct routing - forwarding to {proxy.ollama_url}")
+    
     await proxy.start()
 
 if __name__ == '__main__':

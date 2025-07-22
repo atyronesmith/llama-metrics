@@ -93,10 +93,90 @@ python script.py
    - Token generation, memory, GPU, and power graphs
    - Must run in venv: `./venv/bin/python dashboard.py`
 
+5. **portkey_traffic_generator.py** - Portkey-specific traffic generator
+   - Generates mixed traffic through Portkey Gateway and monitoring proxy
+   - Supports direct Portkey, proxy-routed, and mixed modes
+   - Must run in venv: `./venv/bin/python portkey_traffic_generator.py`
+
+## Portkey AI Gateway Integration
+
+The monitoring stack now includes comprehensive Portkey AI Gateway integration for advanced LLM routing, caching, and observability.
+
+### Architecture with Portkey
+
+```
+[Traffic Generator] → [Monitoring Proxy :11435] → [Portkey Gateway :8787] → [Ollama API :11434]
+                                  ↓
+                        [Prometheus Metrics :8001] → [Dashboard :3001]
+```
+
+### Portkey Features Supported
+
+- **Smart Routing**: Route requests through Portkey for load balancing and fallbacks
+- **Caching**: Leverage Portkey's semantic caching capabilities
+- **Observability**: Dual metrics collection from both proxy and Portkey
+- **Configuration**: JSON-based Portkey configuration for model routing
+
+### Portkey Configuration Files
+
+- `portkey-config.json` - Portkey Gateway configuration for Ollama integration
+- `portkey-compose.yaml` - Docker Compose configuration for Portkey Gateway
+- `portkey-gateway/` - Complete Portkey Gateway codebase with plugins and providers
+
+### Portkey Commands
+
+#### Service Management
+```bash
+make start-portkey       # Start Portkey Gateway with Docker Compose
+make stop-portkey        # Stop Portkey Gateway
+make health-portkey      # Check Portkey Gateway health
+make start-with-portkey  # Start all services with Portkey integration enabled
+```
+
+#### Traffic Generation
+```bash
+make traffic-portkey         # Mixed traffic through both Portkey and proxy
+make traffic-portkey-direct  # Direct traffic to Portkey Gateway
+make traffic-portkey-proxy   # Traffic through monitoring proxy to Portkey
+```
+
+#### Proxy Modes
+```bash
+make start-proxy         # Standard proxy (direct to Ollama)
+make start-proxy-portkey # Proxy with Portkey routing enabled
+```
+
+### Portkey Routing Metrics
+
+The dashboard now includes dedicated Portkey routing metrics:
+
+- **Portkey Requests**: Total requests routed through Portkey
+- **Direct Requests**: Total requests sent directly to Ollama
+- **Routing Ratio**: Percentage of traffic routed through Portkey
+- **Routing Latency**: Latency comparison between routing methods
+
+### Monitoring Proxy Portkey Integration
+
+The monitoring proxy supports Portkey routing with command-line options:
+
+```bash
+# Enable Portkey routing
+./venv/bin/python ollama_monitoring_proxy_fixed.py --enable-portkey
+
+# Custom Portkey configuration
+./venv/bin/python ollama_monitoring_proxy_fixed.py \
+  --enable-portkey \
+  --portkey-host localhost \
+  --portkey-port 8787
+```
+
+All metrics include a `routing` label with values `portkey` or `direct` for granular monitoring.
+
 ## Port Configuration
 
 - 11434: Ollama API (default)
 - 11435: Monitoring proxy 
+- 8787: Portkey AI Gateway
 - 8001: Prometheus metrics endpoint
 - 9090: Prometheus UI
 - 3001: Web dashboard
@@ -109,6 +189,21 @@ Use the Makefile for all testing:
 make test           # Run Python test suite
 make lint           # Validate shell scripts with shellcheck
 make validate       # Check setup and configuration
+```
+
+### Testing Portkey Integration
+
+```bash
+# Test complete Portkey stack
+make start-with-portkey     # Start all services with Portkey enabled
+make traffic-portkey        # Generate mixed Portkey traffic
+make health-portkey         # Verify Portkey Gateway health
+make metrics               # View routing metrics
+
+# Test individual components
+make traffic-portkey-direct # Test direct Portkey routing
+make traffic-portkey-proxy  # Test proxy-to-Portkey routing
+make stop-portkey          # Clean shutdown
 ```
 
 ## Common Issues

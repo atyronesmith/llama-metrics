@@ -17,17 +17,21 @@ rule_files:
 
 # Scrape configurations
 scrape_configs:
-  # Job for Ollama Proxy metrics
+  # Job for Ollama Proxy metrics (includes Portkey routing metrics)
   - job_name: 'ollama_proxy'
     static_configs:
       - targets: ['localhost:8001']
         labels:
           instance: 'ollama-proxy'
     metric_relabel_configs:
-      # Keep all ollama_proxy_ metrics
+      # Keep all ollama_proxy_ metrics including routing labels (portkey/direct)
       - source_labels: [__name__]
         regex: 'ollama_proxy_.*'
         action: keep
+      # Optional: Add routing label extraction if needed
+      # - source_labels: [routing]
+      #   target_label: routing_type
+      #   action: replace
 
   # Job for Enhanced Ollama metrics server
   - job_name: 'ollama_enhanced'
@@ -39,6 +43,20 @@ scrape_configs:
       # Keep all ollama_ metrics
       - source_labels: [__name__]
         regex: 'ollama_.*'
+        action: keep
+
+  # Job for Portkey Gateway metrics (if available)
+  - job_name: 'portkey_gateway'
+    static_configs:
+      - targets: ['localhost:8787']
+        labels:
+          instance: 'portkey-gateway'
+    metrics_path: '/metrics'
+    scrape_timeout: 10s
+    metric_relabel_configs:
+      # Keep all portkey_ metrics if they exist
+      - source_labels: [__name__]
+        regex: 'portkey_.*'
         action: keep
 
   # Job for Node Exporter (system metrics)

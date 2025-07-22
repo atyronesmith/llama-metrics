@@ -121,7 +121,7 @@
         <!-- Summary Metrics Row -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
-                <div class="card metric-card card-primary h-100">
+                <div class="card metric-card card-primary h-100" title="Prometheus Query: rate(ollama_proxy_requests_total[2m]) or local request history calculation">
                     <div class="card-body text-center">
                         <div class="metric-value" id="request-rate">0.0</div>
                         <div class="metric-label">
@@ -131,7 +131,7 @@
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card metric-card card-info h-100">
+                <div class="card metric-card card-info h-100" title="Prometheus Query: sum(rate(ollama_proxy_request_duration_seconds_sum{endpoint=&quot;/api/generate&quot;}[5m])) / sum(rate(ollama_proxy_request_duration_seconds_count{endpoint=&quot;/api/generate&quot;}[5m]))">
                     <div class="card-body text-center">
                         <div class="metric-value" id="avg-latency">0.0</div>
                         <div class="metric-label">
@@ -141,7 +141,7 @@
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card metric-card card-success h-100">
+                <div class="card metric-card card-success h-100" title="Prometheus Query: rate(ollama_proxy_requests_total{status=&quot;200&quot;}[5m]) / rate(ollama_proxy_requests_total[5m]) * 100">
                     <div class="card-body text-center">
                         <div class="metric-value" id="success-rate">100.0%</div>
                         <div class="metric-label">
@@ -151,7 +151,7 @@
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card metric-card card-warning h-100">
+                <div class="card metric-card card-warning h-100" title="Prometheus Query: rate(ollama_proxy_generated_tokens_total[5m])">
                     <div class="card-body text-center">
                         <div class="metric-value" id="tokens-per-sec">0.0</div>
                         <div class="metric-label">
@@ -165,7 +165,7 @@
         <!-- System Metrics Row -->
         <div class="row mb-4">
             <div class="col-md-2 mb-3">
-                <div class="card metric-card card-danger h-100">
+                <div class="card metric-card card-danger h-100" title="Prometheus Query: ollama_proxy_gpu_active_residency_percent">
                     <div class="card-body text-center">
                         <div class="metric-value" id="gpu-util">0.0%</div>
                         <div class="metric-label">
@@ -175,7 +175,7 @@
                 </div>
             </div>
             <div class="col-md-2 mb-3">
-                <div class="card metric-card card-warning h-100">
+                <div class="card metric-card card-warning h-100" title="Prometheus Query: ollama_proxy_package_power_watts">
                     <div class="card-body text-center">
                         <div class="metric-value" id="power-usage">0.0W</div>
                         <div class="metric-label">
@@ -185,7 +185,7 @@
                 </div>
             </div>
             <div class="col-md-2 mb-3">
-                <div class="card metric-card card-info h-100">
+                <div class="card metric-card card-info h-100" title="Prometheus Query: ollama_proxy_memory_usage_bytes / (1024 * 1024)">
                     <div class="card-body text-center">
                         <div class="metric-value" id="memory-usage">0.0</div>
                         <div class="metric-label">
@@ -195,7 +195,7 @@
                 </div>
             </div>
             <div class="col-md-2 mb-3">
-                <div class="card metric-card card-primary h-100">
+                <div class="card metric-card card-primary h-100" title="Prometheus Query: sum(ollama_proxy_active_requests)">
                     <div class="card-body text-center">
                         <div class="metric-value" id="active-requests">0</div>
                         <div class="metric-label">
@@ -210,7 +210,7 @@
         <!-- Queue Metrics Row -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
-                <div class="card metric-card card-warning h-100">
+                <div class="card metric-card card-warning h-100" title="Prometheus Query: ollama_proxy_queue_size">
                     <div class="card-body text-center">
                         <div class="metric-value" id="queue-size">0</div>
                         <div class="metric-label">
@@ -220,7 +220,7 @@
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card metric-card card-info h-100">
+                <div class="card metric-card card-info h-100" title="Prometheus Query: ollama_proxy_queue_processing_rate">
                     <div class="card-body text-center">
                         <div class="metric-value" id="queue-processing-rate">0.0</div>
                         <div class="metric-label">
@@ -230,7 +230,7 @@
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card metric-card card-danger h-100">
+                <div class="card metric-card card-danger h-100" title="Prometheus Query: ollama_proxy_max_queue_size">
                     <div class="card-body text-center">
                         <div class="metric-value" id="max-queue-size">0</div>
                         <div class="metric-label">
@@ -240,7 +240,7 @@
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card metric-card card-success h-100">
+                <div class="card metric-card card-success h-100" title="Prometheus Query: Calculated from queue processing metrics">
                     <div class="card-body text-center">
                         <div class="metric-value" id="queue-efficiency">100%</div>
                         <div class="metric-label">
@@ -249,6 +249,39 @@
                     </div>
                 </div>
             </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-diagram-3"></i> Portkey Routing</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="metric-value text-primary" id="portkey-requests">0</div>
+                                <div class="metric-label">
+                                    <i class="bi bi-gate"></i> Portkey
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="metric-value text-success" id="direct-requests">0</div>
+                                <div class="metric-label">
+                                    <i class="bi bi-arrow-right"></i> Direct
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="metric-value text-info" id="routing-ratio">0.0%</div>
+                                <div class="metric-label">
+                                    <i class="bi bi-percent"></i> Portkey %
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Latency and Performance Metrics -->
+        <div class="row mt-3">
             <div class="col-md-4">
                 <div class="card h-100">
                     <div class="card-header">
@@ -578,6 +611,11 @@
             document.getElementById('queue-processing-rate').textContent = safeNumber(summary.queue_processing_rate, 2);
             document.getElementById('max-queue-size').textContent = summary.max_queue_size || 0;
             
+            // Update Portkey routing metrics
+            document.getElementById('portkey-requests').textContent = summary.portkey_requests || 0;
+            document.getElementById('direct-requests').textContent = summary.direct_requests || 0;
+            document.getElementById('routing-ratio').textContent = safeNumber(summary.routing_ratio, 1) + '%';
+            
             // Calculate queue efficiency (processed vs queued)
             const queueEfficiency = summary.queue_size > 0 ? 
                 Math.max(0, Math.min(100, (summary.queue_processing_rate * 100 / Math.max(1, summary.queue_size)))) : 100;
@@ -721,6 +759,9 @@
         
         // Refresh time series data every 30 seconds
         setInterval(loadTimeSeriesData, 30000);
+        
+        // Refresh AI status every 30 seconds
+        setInterval(loadAIStatus, 30000);
 
         // Handle window resize
         window.addEventListener('resize', function() {
