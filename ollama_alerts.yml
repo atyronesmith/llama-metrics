@@ -1,0 +1,147 @@
+groups:
+  - name: ollama_performance
+    interval: 30s
+    rules:
+      # High request latency
+      - alert: OllamaHighRequestLatency
+        expr: histogram_quantile(0.95, rate(ollama_proxy_request_duration_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency for Ollama model {{ $labels.model }}"
+          description: "95th percentile request latency is {{ $value }}s (threshold: 10s)"
+
+      # Very high request latency
+      - alert: OllamaVeryHighRequestLatency
+        expr: histogram_quantile(0.95, rate(ollama_proxy_request_duration_seconds_bucket[5m])) > 30
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical request latency for Ollama model {{ $labels.model }}"
+          description: "95th percentile request latency is {{ $value }}s (threshold: 30s)"
+
+      # Low token generation rate
+      - alert: OllamaLowTokenRate
+        expr: histogram_quantile(0.5, rate(ollama_proxy_tokens_per_second_bucket{phase="eval"}[5m])) < 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low token generation rate for model {{ $labels.model }}"
+          description: "Median token generation rate is {{ $value }} tokens/s (threshold: < 10)"
+
+      # High error rate
+      - alert: OllamaHighErrorRate
+        expr: rate(ollama_proxy_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate for Ollama"
+          description: "Error rate is {{ $value }} errors/s for model {{ $labels.model }}, error type: {{ $labels.error_type }}"
+
+      # Model load time too high
+      - alert: OllamaSlowModelLoad
+        expr: histogram_quantile(0.9, rate(ollama_proxy_model_load_duration_seconds_bucket[30m])) > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow model loading for {{ $labels.model }}"
+          description: "90th percentile model load time is {{ $value }}s (threshold: 60s)"
+
+  - name: ollama_resource_usage
+    interval: 30s
+    rules:
+      # High CPU usage
+      - alert: OllamaHighCPUUsage
+        expr: ollama_proxy_cpu_usage_percent > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage for Ollama proxy"
+          description: "CPU usage is {{ $value }}% (threshold: 90%)"
+
+      # High memory usage
+      - alert: OllamaHighMemoryUsage
+        expr: ollama_proxy_memory_usage_bytes{type="percent"} > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage for Ollama"
+          description: "Memory usage is {{ $value }}% (threshold: 85%)"
+
+      # Critical memory usage
+      - alert: OllamaCriticalMemoryUsage
+        expr: ollama_proxy_memory_usage_bytes{type="percent"} > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory usage for Ollama"
+          description: "Memory usage is {{ $value }}% (threshold: 95%)"
+
+  - name: ollama_availability
+    interval: 30s
+    rules:
+      # Ollama service down
+      - alert: OllamaServiceDown
+        expr: up{job="ollama_proxy"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ollama proxy service is down"
+          description: "Ollama proxy has been down for more than 2 minutes"
+
+      # No successful requests
+      - alert: OllamaNoSuccessfulRequests
+        expr: rate(ollama_proxy_requests_total{status="200"}[5m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No successful Ollama requests"
+          description: "No successful requests in the last 10 minutes"
+
+      # High number of active requests (potential queue buildup)
+      - alert: OllamaHighActiveRequests
+        expr: sum(ollama_proxy_active_requests) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of active Ollama requests"
+          description: "{{ $value }} active requests (threshold: 10)"
+
+  - name: ollama_usage_patterns
+    interval: 30s
+    rules:
+      # Unusual context length usage
+      - alert: OllamaHighContextUsage
+        expr: histogram_quantile(0.9, rate(ollama_proxy_context_length_bucket[10m])) > 8192
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High context length usage for model {{ $labels.model }}"
+          description: "90th percentile context length is {{ $value }} tokens"
+
+      # Token generation efficiency
+      - alert: OllamaLowTokenEfficiency
+        expr: |
+          (
+            sum(rate(ollama_proxy_generated_tokens_total[5m])) by (model)
+            /
+            sum(rate(ollama_proxy_prompt_tokens_total[5m])) by (model)
+          ) < 0.5
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low token generation efficiency for model {{ $labels.model }}"
+          description: "Generating only {{ $value }} tokens per prompt token (threshold: < 0.5)"

@@ -1,0 +1,54 @@
+global:
+  scrape_interval: 15s     # Default scrape interval
+  evaluation_interval: 15s # Evaluate rules every 15 seconds
+  external_labels:
+    monitor: 'ollama-monitor'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "ollama_alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Job for Ollama Proxy metrics
+  - job_name: 'ollama_proxy'
+    static_configs:
+      - targets: ['localhost:8001']
+        labels:
+          instance: 'ollama-proxy'
+    metric_relabel_configs:
+      # Keep all ollama_proxy_ metrics
+      - source_labels: [__name__]
+        regex: 'ollama_proxy_.*'
+        action: keep
+
+  # Job for Enhanced Ollama metrics server
+  - job_name: 'ollama_enhanced'
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          instance: 'ollama-enhanced'
+    metric_relabel_configs:
+      # Keep all ollama_ metrics
+      - source_labels: [__name__]
+        regex: 'ollama_.*'
+        action: keep
+
+  # Job for Node Exporter (system metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['localhost:9100']
+        labels:
+          instance: 'ollama-host'
+
+  # Job for Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
