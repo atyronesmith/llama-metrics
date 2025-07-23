@@ -19,6 +19,20 @@ This project provides a complete monitoring stack for Ollama AI models, includin
    1000 Questions    AI Responses    Metrics Collection  Scraping   Visualization
 ```
 
+## 📊 Dashboard
+
+The real-time dashboard provides comprehensive monitoring of your Ollama LLM performance:
+
+![Ollama LLM Dashboard](docs/images/dashboard-screenshot.png)
+
+### Dashboard Features:
+- **Real-time Metrics**: Request rate, success rate, and token generation speed
+- **System Monitoring**: GPU usage, power consumption, and memory utilization
+- **Queue Analytics**: Request queue size, processing rate, and efficiency
+- **Latency Tracking**: P50, P75, P95, and P99 percentiles
+- **Time Series Graphs**: Historical view of token generation and memory usage
+- **AI Status**: Automatic health analysis with actionable insights
+
 ## 📁 Project Structure
 
 ```
@@ -203,6 +217,43 @@ rate(traffic_questions_asked_total[5m])
 
 # Error rate
 rate(ollama_requests_total{status="error"}[5m])
+```
+
+## ⚡ Performance Tuning
+
+### Preventing Ollama Overload
+
+To avoid resource contention and multiple model runner processes:
+
+```bash
+# Set before starting Ollama
+export OLLAMA_NUM_PARALLEL=2      # Limit parallel model instances
+export OLLAMA_MAX_LOADED_MODELS=2 # Limit loaded models
+
+# Or use the Makefile targets which include these settings
+make start-ollama
+```
+
+### Proxy Configuration
+
+The monitoring proxy includes a request queue to handle load spikes:
+
+```bash
+# Default settings (applied automatically with make start-proxy)
+--max-concurrency 4    # Worker threads (matches Ollama capacity)
+--max-queue-size 100   # Request buffer size
+
+# Custom settings
+export MAX_CONCURRENCY=6
+export MAX_QUEUE_SIZE=200
+make start-proxy
+```
+
+### Quick Start with Optimized Settings
+
+```bash
+make setup          # Install dependencies
+make start          # Starts all services with optimized settings
 ```
 
 ## 🐛 Troubleshooting
