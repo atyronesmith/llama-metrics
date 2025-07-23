@@ -1,7 +1,7 @@
 # Ollama Monitoring Stack Makefile
 # Run 'make help' to see all available targets
 
-.PHONY: help setup install clean start stop restart status logs test traffic metrics lint commit push all
+.PHONY: help setup install clean start stop restart status logs test traffic metrics health lint commit push all
 
 # Default target
 .DEFAULT_GOAL := help
@@ -42,7 +42,7 @@ help:
 	@grep -E '^## (start|stop|restart|status)' Makefile | sed 's/## /  /' | column -t -s ':'
 	@echo ""
 	@echo "$(GREEN)📊 MONITORING & TESTING:$(NC)"
-	@grep -E '^## (traffic|load-test|dashboard|metrics|logs)' Makefile | sed 's/## /  /' | column -t -s ':'
+	@grep -E '^## (traffic|load-test|dashboard|metrics|health|logs)' Makefile | sed 's/## /  /' | column -t -s ':'
 	@echo ""
 	@echo "$(GREEN)🔧 UTILITIES:$(NC)"
 	@grep -E '^## (clean|lint|test|validate)' Makefile | sed 's/## /  /' | column -t -s ':'
@@ -65,11 +65,18 @@ build-dashboard:
 	@cd $(GO_DASHBOARD_DIR) && make build
 	@echo "$(GREEN)✅ Dashboard built: $(GO_DASHBOARD_DIR)/build/dashboard$(NC)"
 
+## build-health: Build the health checker
+build-health:
+	@echo "$(BLUE)Building health checker...$(NC)"
+	@cd health && make build
+	@echo "$(GREEN)✅ Health checker built: health/build/healthcheck$(NC)"
+
 ## build-all: Build all components for all platforms
 build-all:
 	@echo "$(BLUE)Building all components for multiple platforms...$(NC)"
 	@cd $(GO_PROXY_DIR) && make build-all
 	@cd $(GO_DASHBOARD_DIR) && make build-all
+	@cd health && make build
 	@echo "$(GREEN)✅ All platform builds complete$(NC)"
 
 ## run-proxy: Run the proxy directly with optimized settings (for debugging)
@@ -371,10 +378,35 @@ metrics:
 	@echo "$(BLUE)Current Metrics:$(NC)"
 	@curl -s http://localhost:8001/metrics | grep -E "^ollama_proxy_requests_total|^ollama_proxy_active_requests" | head -20
 
-## health: Check health of monitoring proxy
-health:
-	@echo "$(BLUE)Checking monitoring proxy health...$(NC)"
-	@curl -s http://localhost:8001/health | jq . || echo "$(RED)❌ Proxy not responding$(NC)"
+## health: Check health of all services
+health: build-health
+	@echo "$(BLUE)Checking comprehensive system health...$(NC)"
+	@health/build/healthcheck -mode cli -check comprehensive
+
+## health-simple: Quick health check
+health-simple: build-health
+	@echo "$(BLUE)Quick health check...$(NC)"
+	@health/build/healthcheck -mode cli -check simple
+
+## health-readiness: Check if system is ready
+health-readiness: build-health
+	@echo "$(BLUE)Checking system readiness...$(NC)"
+	@health/build/healthcheck -mode cli -check readiness
+
+## health-liveness: Check if system is alive
+health-liveness: build-health
+	@echo "$(BLUE)Checking system liveness...$(NC)"
+	@health/build/healthcheck -mode cli -check liveness
+
+## health-server: Run health check server
+health-server: build-health
+	@echo "$(BLUE)Starting health check server on port 8080...$(NC)"
+	@health/build/healthcheck -mode server -port 8080
+
+## health-analyzed: Run health check with LLM analysis
+health-analyzed: build-health
+	@echo "$(BLUE)Running health check with AI-powered analysis...$(NC)"
+	@health/build/healthcheck -mode cli -check analyzed
 
 ## prometheus-ui: Open Prometheus UI in browser
 prometheus-ui:
@@ -429,6 +461,7 @@ clean-go:
 	@echo "$(BLUE)Cleaning Go build artifacts...$(NC)"
 	@cd $(GO_PROXY_DIR) && make clean
 	@cd $(GO_DASHBOARD_DIR) && make clean
+	@cd health && make clean
 	@echo "$(GREEN)✅ Go cleanup complete$(NC)"
 
 ## clean-all: Clean everything including venv

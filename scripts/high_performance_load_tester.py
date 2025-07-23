@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LoadTestConfig:
     """Configuration for load testing scenarios"""
-    base_url: str = "http://localhost:11435"  # Use monitoring proxy
+    base_url: str = "http://localhost:11434"  # Use Ollama directly
     model: str = "phi3:mini"
     
     # Concurrency settings

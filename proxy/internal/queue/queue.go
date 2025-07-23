@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"container/heap"
 	"context"
 	"fmt"
 	"sync"
@@ -9,48 +10,94 @@ import (
 	"github.com/atyronesmith/llama-metrics/proxy/internal/metrics"
 )
 
+// Priority levels
+const (
+	PriorityNormal = 0
+	PriorityHigh   = 1
+)
+
 // Request represents a queued request
 type Request struct {
 	ID        string
 	Model     string
+	Priority  int
 	Handler   func() error
 	Submitted time.Time
 	ctx       context.Context
 	result    chan error
 }
 
-// Manager handles request queuing and processing
+// PriorityQueue implements heap.Interface for priority queuing
+type PriorityQueue []*Request
+
+func (pq PriorityQueue) Len() int { return len(pq) }
+
+func (pq PriorityQueue) Less(i, j int) bool {
+	// Higher priority first
+	if pq[i].Priority != pq[j].Priority {
+		return pq[i].Priority > pq[j].Priority
+	}
+	// For same priority, earlier submission time first (FIFO)
+	return pq[i].Submitted.Before(pq[j].Submitted)
+}
+
+func (pq PriorityQueue) Swap(i, j int) {
+	pq[i], pq[j] = pq[j], pq[i]
+}
+
+func (pq *PriorityQueue) Push(x interface{}) {
+	item := x.(*Request)
+	*pq = append(*pq, item)
+}
+
+func (pq *PriorityQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	*pq = old[0 : n-1]
+	return item
+}
+
+// Manager handles request queuing and processing with priority
 type Manager struct {
-	queue       chan *Request
+	pq          PriorityQueue
+	pqMutex     sync.Mutex
 	maxSize     int
 	maxWorkers  int
 	metrics     *metrics.Collector
 	workerPool  sync.WaitGroup
 	ctx         context.Context
 	cancel      context.CancelFunc
+	workSignal  chan struct{}
 
 	// Queue statistics
-	mu              sync.RWMutex
-	totalQueued     int64
-	totalProcessed  int64
-	totalRejected   int64
-	currentSize     int
-	peakSize        int
-	lastProcessed   time.Time
+	mu               sync.RWMutex
+	totalQueued      int64
+	totalProcessed   int64
+	totalRejected    int64
+	currentSize      int
+	peakSize         int
+	lastProcessed    time.Time
+	highPriorityCount int
+	normalPriorityCount int
 }
 
-// NewManager creates a new queue manager
+// NewManager creates a new queue manager with priority support
 func NewManager(maxSize, maxWorkers int, m *metrics.Collector) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	qm := &Manager{
-		queue:      make(chan *Request, maxSize),
+		pq:         make(PriorityQueue, 0, maxSize),
 		maxSize:    maxSize,
 		maxWorkers: maxWorkers,
 		metrics:    m,
 		ctx:        ctx,
 		cancel:     cancel,
+		workSignal: make(chan struct{}, maxSize),
 	}
+
+	// Initialize the priority queue
+	heap.Init(&qm.pq)
 
 	// Start workers
 	for i := 0; i < maxWorkers; i++ {
@@ -64,36 +111,46 @@ func NewManager(maxSize, maxWorkers int, m *metrics.Collector) *Manager {
 	return qm
 }
 
-// Submit adds a request to the queue
-func (qm *Manager) Submit(ctx context.Context, model string, handler func() error) error {
+// Submit adds a request to the queue with a priority
+func (qm *Manager) Submit(ctx context.Context, model string, priority int, handler func() error) error {
 	req := &Request{
 		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 		Model:     model,
+		Priority:  priority,
 		Handler:   handler,
 		Submitted: time.Now(),
 		ctx:       ctx,
 		result:    make(chan error, 1),
 	}
 
-	// Try to add to queue
-	select {
-	case qm.queue <- req:
-		qm.updateQueueStats(true)
-		// Wait for result
-		select {
-		case err := <-req.result:
-			return err
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	default:
-		// Queue is full
+	// Add to priority queue
+	qm.pqMutex.Lock()
+	if len(qm.pq) >= qm.maxSize {
+		qm.pqMutex.Unlock()
 		qm.updateRejectedStats()
 		return fmt.Errorf("queue is full (size: %d)", qm.maxSize)
 	}
+
+	heap.Push(&qm.pq, req)
+	qm.updateQueueStatsLocked(true, priority)
+	qm.pqMutex.Unlock()
+
+	// Signal workers
+	select {
+	case qm.workSignal <- struct{}{}:
+	default:
+	}
+
+	// Wait for result
+	select {
+	case err := <-req.result:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
-// worker processes requests from the queue
+// worker processes requests from the priority queue
 func (qm *Manager) worker(id int) {
 	defer qm.workerPool.Done()
 
@@ -101,7 +158,17 @@ func (qm *Manager) worker(id int) {
 		select {
 		case <-qm.ctx.Done():
 			return
-		case req := <-qm.queue:
+		case <-qm.workSignal:
+			// Get next request from priority queue
+			qm.pqMutex.Lock()
+			if len(qm.pq) == 0 {
+				qm.pqMutex.Unlock()
+				continue
+			}
+			req := heap.Pop(&qm.pq).(*Request)
+			qm.updateQueueStatsLocked(false, req.Priority)
+			qm.pqMutex.Unlock()
+
 			qm.processRequest(req)
 		}
 	}
@@ -109,12 +176,16 @@ func (qm *Manager) worker(id int) {
 
 // processRequest handles a single request
 func (qm *Manager) processRequest(req *Request) {
-	// Update queue stats
-	qm.updateQueueStats(false)
-
 	// Record queue wait time
 	waitTime := time.Since(req.Submitted)
 	qm.metrics.RecordQueueWaitTime(req.Model, waitTime)
+
+	// Record priority-specific wait time
+	if req.Priority == PriorityHigh {
+		qm.metrics.QueueHighPriorityWaitTime.Observe(waitTime.Seconds())
+	} else {
+		qm.metrics.QueueNormalPriorityWaitTime.Observe(waitTime.Seconds())
+	}
 
 	// Check if request context is still valid
 	select {
@@ -132,8 +203,8 @@ func (qm *Manager) processRequest(req *Request) {
 	qm.updateProcessedStats()
 }
 
-// updateQueueStats updates queue statistics
-func (qm *Manager) updateQueueStats(added bool) {
+// updateQueueStatsLocked updates queue statistics (must be called with pqMutex locked)
+func (qm *Manager) updateQueueStatsLocked(added bool, priority int) {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
@@ -143,12 +214,24 @@ func (qm *Manager) updateQueueStats(added bool) {
 		if qm.currentSize > qm.peakSize {
 			qm.peakSize = qm.currentSize
 		}
+		if priority == PriorityHigh {
+			qm.highPriorityCount++
+		} else {
+			qm.normalPriorityCount++
+		}
 	} else {
 		qm.currentSize--
+		if priority == PriorityHigh {
+			qm.highPriorityCount--
+		} else {
+			qm.normalPriorityCount--
+		}
 	}
 
 	// Update metrics
 	qm.metrics.QueueSize.Set(float64(qm.currentSize))
+	qm.metrics.QueueHighPriorityCount.Set(float64(qm.highPriorityCount))
+	qm.metrics.QueueNormalPriorityCount.Set(float64(qm.normalPriorityCount))
 }
 
 // updateProcessedStats updates processing statistics
@@ -204,13 +287,15 @@ func (qm *Manager) GetStats() map[string]interface{} {
 	defer qm.mu.RUnlock()
 
 	return map[string]interface{}{
-		"current_size":    qm.currentSize,
-		"max_size":        qm.maxSize,
-		"peak_size":       qm.peakSize,
-		"total_queued":    qm.totalQueued,
-		"total_processed": qm.totalProcessed,
-		"total_rejected":  qm.totalRejected,
-		"workers":         qm.maxWorkers,
+		"current_size":       qm.currentSize,
+		"max_size":           qm.maxSize,
+		"peak_size":          qm.peakSize,
+		"total_queued":       qm.totalQueued,
+		"total_processed":    qm.totalProcessed,
+		"total_rejected":     qm.totalRejected,
+		"workers":            qm.maxWorkers,
+		"high_priority":      qm.highPriorityCount,
+		"normal_priority":    qm.normalPriorityCount,
 	}
 }
 

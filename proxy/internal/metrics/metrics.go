@@ -37,6 +37,10 @@ type Collector struct {
 	QueueProcessingRate  prometheus.Gauge
 	QueueWaitTime        *prometheus.HistogramVec
 	QueuePeakSize        prometheus.Gauge
+	QueueHighPriorityCount    prometheus.Gauge
+	QueueNormalPriorityCount  prometheus.Gauge
+	QueueHighPriorityWaitTime prometheus.Histogram
+	QueueNormalPriorityWaitTime prometheus.Histogram
 
 	// Context length
 	ContextLength *prometheus.HistogramVec
@@ -186,6 +190,36 @@ func NewCollector() *Collector {
 			prometheus.GaugeOpts{
 				Name: "ollama_proxy_queue_peak_size",
 				Help: "Peak queue size since startup",
+			},
+		),
+
+		QueueHighPriorityCount: promauto.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "ollama_proxy_queue_high_priority_count",
+				Help: "Current number of high priority requests in the queue",
+			},
+		),
+
+		QueueNormalPriorityCount: promauto.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "ollama_proxy_queue_normal_priority_count",
+				Help: "Current number of normal priority requests in the queue",
+			},
+		),
+
+		QueueHighPriorityWaitTime: promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "ollama_proxy_queue_high_priority_wait_time_seconds",
+				Help:    "Time spent waiting in high priority queue before processing",
+				Buckets: []float64{0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0},
+			},
+		),
+
+		QueueNormalPriorityWaitTime: promauto.NewHistogram(
+			prometheus.HistogramOpts{
+				Name:    "ollama_proxy_queue_normal_priority_wait_time_seconds",
+				Help:    "Time spent waiting in normal priority queue before processing",
+				Buckets: []float64{0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0},
 			},
 		),
 

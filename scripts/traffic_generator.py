@@ -2,7 +2,7 @@
 """
 Ollama Traffic Generator for Monitoring
 
-This program generates continuous prompt traffic to Ollama to help monitor
+This program generates continuous prompt traffic to Ollama via the Go proxy to help monitor
 model performance and collect metrics. It asks questions from a curated
 list of 1000 diverse questions, processing them serially with random selection.
 """
@@ -30,10 +30,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class OllamaTrafficGenerator:
-    def __init__(self, model: str = "phi3:mini", base_url: str = "http://localhost:8000"):
+    def __init__(self, model: str = "phi3:mini", base_url: str = "http://localhost:11435"):
         self.model = model
         self.base_url = base_url
-        self.api_key = "sk-1234567890abcdef"  # LiteLLM API key
+        # Now connects through the monitoring proxy which provides enhanced metrics
         self.questions = []
         self.stats = {
             "total_requests": 0,
@@ -91,37 +91,29 @@ class OllamaTrafficGenerator:
             sys.exit(1)
 
     async def check_ollama_health(self) -> bool:
-        """Check if LiteLLM proxy is running and accessible"""
+        """Check if Ollama is running and accessible"""
         try:
-            headers = {"Authorization": f"Bearer {self.api_key}"}
             async with aiohttp.ClientSession() as session:
-                async with session.get(f"{self.base_url}/v1/models", headers=headers) as response:
+                async with session.get(f"{self.base_url}/api/tags") as response:
                     if response.status == 200:
-                        logger.info("✅ LiteLLM proxy is running and accessible")
+                        logger.info("✅ Ollama is running and accessible")
                         return True
                     else:
-                        logger.error(f"❌ LiteLLM proxy returned status {response.status}")
+                        logger.error(f"❌ Ollama returned status {response.status}")
                         return False
         except Exception as e:
-            logger.error(f"❌ Cannot connect to LiteLLM proxy: {e}")
+            logger.error(f"❌ Cannot connect to Ollama: {e}")
             return False
 
     async def send_prompt(self, question: str) -> Optional[Dict]:
-        """Send a single prompt to LiteLLM (OpenAI-compatible API)"""
+        """Send a single prompt to Ollama API"""
         payload = {
             "model": self.model,
-            "messages": [
-                {
-                    "role": "user", 
-                    "content": question
-                }
-            ],
-            "stream": False,
-            "max_tokens": 500
+            "prompt": question,
+            "stream": False
         }
 
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
 
@@ -130,7 +122,7 @@ class OllamaTrafficGenerator:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{self.base_url}/v1/chat/completions",
+                    f"{self.base_url}/api/generate",
                     json=payload,
                     headers=headers,
                     timeout=aiohttp.ClientTimeout(total=120)
@@ -146,11 +138,9 @@ class OllamaTrafficGenerator:
 
                         logger.info(f"✅ Q{self.stats['total_requests']}: {question[:50]}... (Latency: {latency:.2f}s)")
 
-                        # Extract response from OpenAI format
-                        response_text = ""
-                        if 'choices' in result and result['choices']:
-                            response_text = result['choices'][0].get('message', {}).get('content', '')
-                        
+                        # Extract response from Ollama format
+                        response_text = result.get('response', '')
+
                         if response_text:
                             logger.info(f"🤖 Response: {response_text[:100]}{'...' if len(response_text) > 100 else ''}")
 
