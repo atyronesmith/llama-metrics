@@ -26,7 +26,7 @@ func DefaultConfig() *Config {
 		MetricsPort:    8001,
 		LogLevel:       "info",
 		MaxQueueSize:   100,
-		MaxConcurrency: 10,
+		MaxConcurrency: 4,  // Reduced to prevent Ollama overload
 	}
 }
 

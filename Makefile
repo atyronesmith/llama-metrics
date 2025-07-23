@@ -6,6 +6,10 @@
 # Default target
 .DEFAULT_GOAL := help
 
+# Go build targets
+GO_PROXY_DIR := proxy
+GO_DASHBOARD_DIR := dashboard
+
 # Variables
 VENV := venv
 PYTHON := $(VENV)/bin/python
@@ -31,6 +35,9 @@ help:
 	@echo "$(GREEN)🛠️  SETUP COMMANDS:$(NC)"
 	@grep -E '^## (setup|check-system|install-|pull-model|quick-setup)' Makefile | sed 's/## /  /' | column -t -s ':'
 	@echo ""
+	@echo "$(GREEN)🔨 BUILD COMMANDS:$(NC)"
+	@grep -E '^## (build|build-proxy|build-dashboard|build-all)' Makefile | sed 's/## /  /' | column -t -s ':'
+	@echo ""
 	@echo "$(GREEN)🚦 SERVICE COMMANDS:$(NC)"
 	@grep -E '^## (start|stop|restart|status)' Makefile | sed 's/## /  /' | column -t -s ':'
 	@echo ""
@@ -41,6 +48,40 @@ help:
 	@grep -E '^## (clean|lint|test|validate)' Makefile | sed 's/## /  /' | column -t -s ':'
 	@echo ""
 	@echo "$(BLUE)📖 More Info:$(NC) See SETUP.md for detailed installation guide"
+
+## build: Build all Go components (proxy and dashboard)
+build: build-proxy build-dashboard
+	@echo "$(GREEN)✅ All components built successfully$(NC)"
+
+## build-proxy: Build the monitoring proxy
+build-proxy:
+	@echo "$(BLUE)Building monitoring proxy...$(NC)"
+	@cd $(GO_PROXY_DIR) && make build
+	@echo "$(GREEN)✅ Proxy built: $(GO_PROXY_DIR)/build/ollama-proxy$(NC)"
+
+## build-dashboard: Build the dashboard
+build-dashboard:
+	@echo "$(BLUE)Building dashboard...$(NC)"
+	@cd $(GO_DASHBOARD_DIR) && make build
+	@echo "$(GREEN)✅ Dashboard built: $(GO_DASHBOARD_DIR)/build/dashboard$(NC)"
+
+## build-all: Build all components for all platforms
+build-all:
+	@echo "$(BLUE)Building all components for multiple platforms...$(NC)"
+	@cd $(GO_PROXY_DIR) && make build-all
+	@cd $(GO_DASHBOARD_DIR) && make build-all
+	@echo "$(GREEN)✅ All platform builds complete$(NC)"
+
+## run-proxy: Run the proxy directly with optimized settings (for debugging)
+run-proxy:
+	@echo "$(BLUE)Running proxy in foreground with optimized settings...$(NC)"
+	@echo "$(YELLOW)Max concurrency: 4, Max queue: 100$(NC)"
+	@cd $(GO_PROXY_DIR) && go run cmd/proxy/main.go --max-concurrency 4
+
+## run-dashboard: Run the dashboard directly (for debugging)
+run-dashboard:
+	@echo "$(BLUE)Running dashboard in foreground...$(NC)"
+	@cd $(GO_DASHBOARD_DIR) && make run
 
 ## check-system: Verify Mac M-series and system requirements
 check-system:
@@ -90,7 +131,7 @@ install-ollama:
 		fi \
 	fi
 
-## install-prometheus: Install Prometheus if not present  
+## install-prometheus: Install Prometheus if not present
 install-prometheus:
 	@echo "$(BLUE)Checking Prometheus installation...$(NC)"
 	@if command -v prometheus >/dev/null 2>&1; then \
@@ -134,12 +175,18 @@ venv:
 		echo "$(YELLOW)Virtual environment already exists$(NC)"; \
 	fi
 
-## install: Install all Python dependencies
+## install: Install dependencies and show configuration recommendations
 install: venv
 	@echo "$(BLUE)Installing Python dependencies...$(NC)"
 	@$(PIP) install --upgrade pip
 	@$(PIP) install -r requirements_all.txt
 	@echo "$(GREEN)✅ All dependencies installed$(NC)"
+	@echo ""
+	@echo "$(YELLOW)⚡ Performance Recommendations:$(NC)"
+	@echo "  • Ollama will be started with OLLAMA_NUM_PARALLEL=2 to prevent resource contention"
+	@echo "  • Proxy will use max concurrency of 4 to match Ollama's capabilities"
+	@echo "  • To customize: Set MAX_CONCURRENCY and OLLAMA_NUM_PARALLEL environment variables"
+	@echo ""
 
 ## pull-model: Pull and verify phi3:mini model for Ollama
 pull-model:
@@ -164,66 +211,56 @@ pull-model:
 	fi
 
 ## start: Start all monitoring services with dashboard
-start: start-ollama start-proxy start-litellm start-portkey start-prometheus start-dashboard
+start: start-ollama start-proxy start-prometheus start-dashboard
 	@echo "$(GREEN)🚀 All services started successfully!$(NC)"
 	@echo ""
 	@echo "$(BLUE)📊 Dashboard:$(NC)        http://localhost:3001"
 	@echo "$(BLUE)📈 Prometheus UI:$(NC)    http://localhost:9090"
 	@echo "$(BLUE)🔧 Metrics API:$(NC)      http://localhost:8001/metrics"
 	@echo "$(BLUE)🤖 Ollama API:$(NC)       http://localhost:11434"
-	@echo "$(BLUE)🔄 LiteLLM Proxy:$(NC)    http://localhost:8000"
-	@echo "$(BLUE)🚪 Portkey Gateway:$(NC)  http://localhost:8787"
 	@echo ""
 	@echo "$(YELLOW)💡 Pro tip: Run 'make traffic' to generate test traffic$(NC)"
 
-## start-with-portkey: Start all services with Portkey-enabled monitoring proxy
-start-with-portkey: start-ollama start-proxy-portkey start-litellm start-portkey start-prometheus start-dashboard
-	@echo "$(GREEN)🚀 All services with Portkey integration started!$(NC)"
-	@echo ""
-	@echo "$(BLUE)📊 Dashboard:$(NC)        http://localhost:3001"
-	@echo "$(BLUE)📈 Prometheus UI:$(NC)    http://localhost:9090"
-	@echo "$(BLUE)🔧 Metrics API:$(NC)      http://localhost:8001/metrics"
-	@echo "$(BLUE)🤖 Ollama API:$(NC)       http://localhost:11434"
-	@echo "$(BLUE)🔄 LiteLLM Proxy:$(NC)    http://localhost:8000"
-	@echo "$(BLUE)🚪 Portkey Gateway:$(NC)  http://localhost:8787"
-	@echo ""
-	@echo "$(YELLOW)🌟 Portkey routing enabled! Traffic to proxy (11435) routes through Portkey$(NC)"
-	@echo "$(YELLOW)💡 Run 'make traffic' to test the integrated stack$(NC)"
 
-## start-ollama: Start Ollama service and monitoring instance
+## start-ollama: Start Ollama service with optimized settings
 start-ollama:
 	@if ! pgrep -x "ollama" > /dev/null; then \
-		echo "$(BLUE)Starting Ollama...$(NC)"; \
-		ollama serve > ollama.log 2>&1 & \
+		echo "$(BLUE)Starting Ollama with optimized settings...$(NC)"; \
+		echo "$(YELLOW)Setting OLLAMA_NUM_PARALLEL=2 to prevent resource contention$(NC)"; \
+		OLLAMA_NUM_PARALLEL=2 OLLAMA_MAX_LOADED_MODELS=2 ollama serve > ollama.log 2>&1 & \
 		sleep 3; \
-		echo "$(GREEN)✅ Ollama started$(NC)"; \
+		echo "$(GREEN)✅ Ollama started with parallel limit of 2$(NC)"; \
 	else \
 		echo "$(YELLOW)Ollama is already running$(NC)"; \
+		echo "$(YELLOW)Note: If experiencing issues, restart with: make stop-ollama && make start-ollama$(NC)"; \
 	fi
 	@echo "$(BLUE)Starting dedicated monitoring Ollama instance...$(NC)"
 	@bash scripts/start_monitoring_ollama.sh
 
-## start-proxy: Start the monitoring proxy
-start-proxy: venv
-	@if ! pgrep -f "ollama_monitoring_proxy_fixed.py" > /dev/null; then \
-		echo "$(BLUE)Starting monitoring proxy...$(NC)"; \
-		$(PYTHON) ollama_monitoring_proxy_fixed.py > proxy.log 2>&1 & \
+## start-proxy: Start the monitoring proxy with optimized settings
+start-proxy:
+	@if ! pgrep -f "ollama-proxy" > /dev/null; then \
+		echo "$(BLUE)Building and starting Go monitoring proxy...$(NC)"; \
+		echo "$(YELLOW)Using max concurrency of 4 to match Ollama's capabilities$(NC)"; \
+		cd proxy && make build && ./build/ollama-proxy --max-concurrency 4 > ../proxy.log 2>&1 & \
+		cd ..; \
 		sleep 2; \
-		echo "$(GREEN)✅ Monitoring proxy started$(NC)"; \
+		echo "$(GREEN)✅ Go monitoring proxy started with concurrency limit of 4$(NC)"; \
 	else \
 		echo "$(YELLOW)Monitoring proxy is already running$(NC)"; \
 	fi
 
-## start-proxy-portkey: Start the monitoring proxy with Portkey routing
-start-proxy-portkey: venv
+## start-proxy-python: Start the Python monitoring proxy (legacy)
+start-proxy-python: venv
 	@if ! pgrep -f "ollama_monitoring_proxy_fixed.py" > /dev/null; then \
-		echo "$(BLUE)Starting monitoring proxy with Portkey routing...$(NC)"; \
-		$(PYTHON) ollama_monitoring_proxy_fixed.py --enable-portkey > proxy_portkey.log 2>&1 & \
+		echo "$(BLUE)Starting Python monitoring proxy...$(NC)"; \
+		$(PYTHON) ollama_monitoring_proxy_fixed.py > proxy.log 2>&1 & \
 		sleep 2; \
-		echo "$(GREEN)✅ Monitoring proxy with Portkey routing started$(NC)"; \
+		echo "$(GREEN)✅ Python monitoring proxy started$(NC)"; \
 	else \
 		echo "$(YELLOW)Monitoring proxy is already running$(NC)"; \
 	fi
+
 
 ## start-prometheus: Start Prometheus
 start-prometheus:
@@ -235,13 +272,15 @@ start-prometheus:
 	fi
 
 ## stop: Stop all monitoring services
-stop: stop-proxy stop-litellm stop-portkey stop-monitoring-ollama stop-prometheus
+stop: stop-proxy stop-monitoring-ollama stop-prometheus stop-dashboard
 	@echo "$(GREEN)✅ All monitoring services stopped$(NC)"
 
 ## stop-proxy: Stop the monitoring proxy
 stop-proxy:
 	@echo "$(BLUE)Stopping monitoring proxy...$(NC)"
-	@pkill -f "ollama_monitoring_proxy" || true
+	@pkill -f "ollama-proxy" 2>/dev/null || true
+	@lsof -ti:11435 | xargs kill -9 2>/dev/null || true
+	@lsof -ti:8001 | xargs kill -9 2>/dev/null || true
 	@echo "$(GREEN)✅ Monitoring proxy stopped$(NC)"
 
 ## stop-monitoring-ollama: Stop the dedicated monitoring Ollama instance
@@ -250,53 +289,7 @@ stop-monitoring-ollama:
 	@lsof -ti:11435 | xargs kill -9 2>/dev/null || true
 	@echo "$(GREEN)✅ Monitoring Ollama instance stopped$(NC)"
 
-## start-litellm: Start LiteLLM proxy with priority queues
-start-litellm: venv
-	@if ! lsof -ti:8000 > /dev/null 2>&1; then \
-		echo "$(BLUE)Starting LiteLLM proxy...$(NC)"; \
-		bash scripts/start_litellm_proxy.sh; \
-	else \
-		echo "$(YELLOW)LiteLLM proxy is already running on port 8000$(NC)"; \
-	fi
 
-## stop-litellm: Stop LiteLLM proxy
-stop-litellm:
-	@echo "$(BLUE)Stopping LiteLLM proxy...$(NC)"
-	@lsof -ti:8000 | xargs kill -9 2>/dev/null || true
-	@pkill -f "litellm" || true
-	@echo "$(GREEN)✅ LiteLLM proxy stopped$(NC)"
-
-## start-portkey: Start Portkey Gateway with Docker Compose
-start-portkey:
-	@if ! lsof -ti:8787 > /dev/null 2>&1; then \
-		echo "$(BLUE)Starting Portkey Gateway...$(NC)"; \
-		if command -v podman-compose >/dev/null 2>&1; then \
-			podman-compose -f portkey-compose.yaml up -d; \
-		elif command -v docker-compose >/dev/null 2>&1; then \
-			docker-compose -f portkey-compose.yaml up -d; \
-		elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
-			docker compose -f portkey-compose.yaml up -d; \
-		else \
-			echo "$(RED)❌ Neither Docker nor Podman Compose found$(NC)"; \
-			exit 1; \
-		fi; \
-		echo "$(GREEN)✅ Portkey Gateway started at http://localhost:8787$(NC)"; \
-	else \
-		echo "$(YELLOW)Portkey Gateway is already running on port 8787$(NC)"; \
-	fi
-
-## stop-portkey: Stop Portkey Gateway
-stop-portkey:
-	@echo "$(BLUE)Stopping Portkey Gateway...$(NC)"
-	@if command -v podman-compose >/dev/null 2>&1; then \
-		podman-compose -f portkey-compose.yaml down 2>/dev/null || true; \
-	elif command -v docker-compose >/dev/null 2>&1; then \
-		docker-compose -f portkey-compose.yaml down 2>/dev/null || true; \
-	elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then \
-		docker compose -f portkey-compose.yaml down 2>/dev/null || true; \
-	fi
-	@lsof -ti:8787 | xargs kill -9 2>/dev/null || true
-	@echo "$(GREEN)✅ Portkey Gateway stopped$(NC)"
 
 ## stop-prometheus: Stop Prometheus
 stop-prometheus:
@@ -317,37 +310,35 @@ status:
 	else \
 		echo "$(RED)❌ Ollama: Not running$(NC)"; \
 	fi
-	@if pgrep -f "ollama_monitoring_proxy" > /dev/null; then \
-		echo "$(GREEN)✅ Monitoring Proxy: Running$(NC)"; \
+	@if pgrep -f "ollama-proxy" > /dev/null || lsof -ti:11435 > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Monitoring Proxy (Go): Running$(NC)"; \
+		if lsof -ti:8001 > /dev/null 2>&1; then \
+			echo "    ├─ Proxy:   http://localhost:11435"; \
+			echo "    └─ Metrics: http://localhost:8001/metrics"; \
+		fi \
 	else \
 		echo "$(RED)❌ Monitoring Proxy: Not running$(NC)"; \
 	fi
-	@if lsof -ti:8000 > /dev/null 2>&1; then \
-		echo "$(GREEN)✅ LiteLLM Proxy: Running$(NC)"; \
-	else \
-		echo "$(RED)❌ LiteLLM Proxy: Not running$(NC)"; \
-	fi
-	@if lsof -ti:8787 > /dev/null 2>&1; then \
-		echo "$(GREEN)✅ Portkey Gateway: Running$(NC)"; \
-	else \
-		echo "$(RED)❌ Portkey Gateway: Not running$(NC)"; \
-	fi
 	@if pgrep -x "prometheus" > /dev/null; then \
 		echo "$(GREEN)✅ Prometheus: Running (native)$(NC)"; \
+		echo "    └─ UI: http://localhost:9090"; \
 	elif (podman ps 2>/dev/null || docker ps 2>/dev/null) | grep -q prometheus; then \
 		echo "$(GREEN)✅ Prometheus: Running (container)$(NC)"; \
+		echo "    └─ UI: http://localhost:9090"; \
 	else \
 		echo "$(RED)❌ Prometheus: Not running$(NC)"; \
+	fi
+	@if pgrep -f "dashboard" > /dev/null && ! pgrep -f "dashboard.py" > /dev/null || lsof -ti:3001 > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Dashboard (Go): Running$(NC)"; \
+		echo "    └─ URL: http://localhost:3001"; \
+	else \
+		echo "$(RED)❌ Dashboard: Not running$(NC)"; \
 	fi
 
 ## logs: Tail all service logs
 logs:
 	@echo "$(BLUE)Tailing logs (Ctrl+C to stop)...$(NC)"
-	@tail -f proxy.log prometheus.log ollama.log litellm.log 2>/dev/null || echo "$(YELLOW)No log files found$(NC)"
-
-## logs-litellm: Tail LiteLLM proxy logs
-logs-litellm:
-	@tail -f litellm.log 2>/dev/null || echo "$(YELLOW)No LiteLLM logs found$(NC)"
+	@tail -f proxy.log prometheus.log ollama.log dashboard.log 2>/dev/null || echo "$(YELLOW)No log files found$(NC)"
 
 ## logs-proxy: Tail proxy logs
 logs-proxy:
@@ -374,20 +365,6 @@ traffic-continuous: venv
 	@echo "$(BLUE)Starting continuous traffic generation...$(NC)"
 	@./generate_traffic.sh
 
-## traffic-portkey: Generate mixed traffic through Portkey Gateway and monitoring proxy
-traffic-portkey: venv
-	@echo "$(BLUE)Generating mixed Portkey traffic...$(NC)"
-	@$(PYTHON) portkey_traffic_generator.py --requests 20 --delay 2.0 --mode mixed
-
-## traffic-portkey-direct: Generate traffic directly to Portkey Gateway
-traffic-portkey-direct: venv
-	@echo "$(BLUE)Generating direct traffic to Portkey Gateway...$(NC)"
-	@$(PYTHON) portkey_traffic_generator.py --requests 15 --delay 1.5 --mode portkey
-
-## traffic-portkey-proxy: Generate traffic through monitoring proxy to Portkey
-traffic-portkey-proxy: venv
-	@echo "$(BLUE)Generating traffic through monitoring proxy to Portkey...$(NC)"
-	@$(PYTHON) portkey_traffic_generator.py --requests 15 --delay 1.5 --mode proxy
 
 ## metrics: Show current metrics
 metrics:
@@ -398,16 +375,6 @@ metrics:
 health:
 	@echo "$(BLUE)Checking monitoring proxy health...$(NC)"
 	@curl -s http://localhost:8001/health | jq . || echo "$(RED)❌ Proxy not responding$(NC)"
-
-## health-litellm: Check LiteLLM proxy health
-health-litellm:
-	@echo "$(BLUE)Checking LiteLLM proxy health...$(NC)"
-	@curl -s http://localhost:8000/health | jq . || echo "$(RED)❌ LiteLLM proxy not responding$(NC)"
-
-## health-portkey: Check Portkey Gateway health
-health-portkey:
-	@echo "$(BLUE)Checking Portkey Gateway health...$(NC)"
-	@curl -s http://localhost:8787/health | jq . || echo "$(RED)❌ Portkey Gateway not responding$(NC)"
 
 ## prometheus-ui: Open Prometheus UI in browser
 prometheus-ui:
@@ -449,13 +416,20 @@ validate: lint
 	fi
 
 ## clean: Clean up generated files and logs
-clean:
+clean: clean-go
 	@echo "$(BLUE)Cleaning up...$(NC)"
 	@rm -f *.log
 	@rm -f monitoring_pids.txt
 	@rm -rf __pycache__
 	@find . -name "*.pyc" -delete
 	@echo "$(GREEN)✅ Cleanup complete$(NC)"
+
+## clean-go: Clean Go build artifacts
+clean-go:
+	@echo "$(BLUE)Cleaning Go build artifacts...$(NC)"
+	@cd $(GO_PROXY_DIR) && make clean
+	@cd $(GO_DASHBOARD_DIR) && make clean
+	@echo "$(GREEN)✅ Go cleanup complete$(NC)"
 
 ## clean-all: Clean everything including venv
 clean-all: clean
@@ -531,10 +505,11 @@ dashboard: venv
 	@$(PYTHON) dashboard.py
 
 ## start-dashboard: Start dashboard in background
-start-dashboard: venv
-	@if ! pgrep -f "dashboard.py" > /dev/null; then \
-		echo "$(BLUE)Starting dashboard in background...$(NC)"; \
-		nohup $(PYTHON) dashboard.py > dashboard.log 2>&1 & \
+start-dashboard:
+	@if ! pgrep -f "dashboard" > /dev/null && ! lsof -ti:3001 > /dev/null 2>&1; then \
+		echo "$(BLUE)Building and starting Go dashboard...$(NC)"; \
+		cd dashboard && make build && ./build/dashboard > ../dashboard.log 2>&1 & \
+		cd ..; \
 		sleep 2; \
 		echo "$(GREEN)✅ Dashboard started at http://localhost:3001$(NC)"; \
 	else \
@@ -544,7 +519,8 @@ start-dashboard: venv
 ## stop-dashboard: Stop dashboard
 stop-dashboard:
 	@echo "$(BLUE)Stopping dashboard...$(NC)"
-	@pkill -f "dashboard.py" || true
+	@pkill -f "dashboard" 2>/dev/null || true
+	@lsof -ti:3001 | xargs kill -9 2>/dev/null || true
 	@echo "$(GREEN)✅ Dashboard stopped$(NC)"
 
 ## install-dashboard: Install dashboard dependencies
