@@ -141,6 +141,9 @@ func (c *Collector) GetSummaryMetrics() (map[string]interface{}, error) {
 	// Check Ollama health
 	metrics["ollama_status"] = c.checkOllamaHealth()
 
+	// Check Proxy health
+	metrics["proxy_status"] = c.checkProxyHealth()
+
 	// Direct requests count
 	totalRequests, err := c.queryScalar(ctx, `ollama_proxy_requests_total`)
 	if err != nil {
@@ -458,6 +461,45 @@ func (c *Collector) checkOllamaHealth() map[string]interface{} {
 	return status
 }
 
+func (c *Collector) checkProxyHealth() map[string]interface{} {
+	status := map[string]interface{}{
+		"status":        "unknown",
+		"response_time": nil,
+		"last_check":    time.Now().Unix(),
+	}
+
+	// Proxy health endpoint is on metrics port 8001
+	start := time.Now()
+	resp, err := c.httpClient.Get("http://localhost:8001/health")
+	if err != nil {
+		status["status"] = "offline"
+		return status
+	}
+	defer resp.Body.Close()
+
+	responseTime := time.Since(start).Milliseconds()
+
+	if resp.StatusCode == 200 {
+		// For now, just check if we get a 200 response
+		status["status"] = "healthy"
+		status["response_time"] = responseTime
+
+		// Try to parse the response if it's JSON
+		var data map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err == nil {
+			// If there's a status field in the response, use it
+			if s, ok := data["status"].(string); ok {
+				status["status"] = s
+			}
+		}
+	} else {
+		status["status"] = "unhealthy"
+		status["response_time"] = responseTime
+	}
+
+	return status
+}
+
 func (c *Collector) prepareMetricsContext(summary map[string]interface{}) map[string]string {
 	context := make(map[string]string)
 
@@ -552,6 +594,7 @@ func (c *Collector) queryLLM(prompt string) (string, error) {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Priority", "high")  // AI summaries get high priority
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

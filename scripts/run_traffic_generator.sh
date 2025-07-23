@@ -64,6 +64,9 @@ check_proxy() {
     fi
 }
 
+# Track if a preset mode was selected
+MODE_SELECTED=false
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -71,24 +74,28 @@ while [[ $# -gt 0 ]]; do
             # Quick mode: 10 requests, no delay
             DEFAULT_MAX="10"
             DEFAULT_DELAY="0"
+            MODE_SELECTED=true
             shift
             ;;
         --demo)
             # Demo mode: 50 requests, 2s delay
             DEFAULT_MAX="50"
             DEFAULT_DELAY="2"
+            MODE_SELECTED=true
             shift
             ;;
         --stress)
             # Stress test: 1000 requests, 0.1s delay
             DEFAULT_MAX="1000"
             DEFAULT_DELAY="0.1"
+            MODE_SELECTED=true
             shift
             ;;
         --continuous)
             # Continuous mode: no limit, 1s delay
             DEFAULT_MAX=""
             DEFAULT_DELAY="1"
+            MODE_SELECTED=true
             shift
             ;;
         *)
@@ -103,7 +110,7 @@ check_ollama
 check_proxy
 
 # Interactive mode if no preset was selected
-if [ -z "$1" ]; then
+if [ "$MODE_SELECTED" = false ]; then
     echo ""
     echo "Choose a traffic generation mode:"
     echo "  1) Quick test (10 requests, no delay)"
@@ -149,7 +156,12 @@ if [ -z "$1" ]; then
 fi
 
 # Build the command
-CMD="../venv/bin/python traffic_generator.py --model $DEFAULT_MODEL --url $DEFAULT_URL --delay $DEFAULT_DELAY"
+# Get the script directory and project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Use the venv Python from project root
+CMD="$PROJECT_DIR/venv/bin/python $SCRIPT_DIR/traffic_generator.py --model $DEFAULT_MODEL --url $DEFAULT_URL --delay $DEFAULT_DELAY"
 
 if [ -n "$DEFAULT_MAX" ]; then
     CMD="$CMD --max $DEFAULT_MAX"

@@ -46,6 +46,12 @@ func (h *ProxyHandler) HandleGenerate(c *gin.Context) {
 	start := time.Now()
 	model := "unknown"
 
+	// Extract priority from header (default to normal)
+	priority := queue.PriorityNormal
+	if priorityHeader := c.GetHeader("X-Priority"); priorityHeader == "high" {
+		priority = queue.PriorityHigh
+	}
+
 	// Read request body
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -60,8 +66,8 @@ func (h *ProxyHandler) HandleGenerate(c *gin.Context) {
 		model = req.Model
 	}
 
-	// Submit to queue
-	err = h.queue.Submit(c.Request.Context(), model, func() error {
+	// Submit to queue with priority
+	err = h.queue.Submit(c.Request.Context(), model, priority, func() error {
 		// Track active requests
 		h.metrics.IncActiveRequests(model)
 		defer h.metrics.DecActiveRequests(model)
@@ -207,6 +213,12 @@ func (h *ProxyHandler) HandleChat(c *gin.Context) {
 	start := time.Now()
 	model := "unknown"
 
+	// Extract priority from header (default to normal)
+	priority := queue.PriorityNormal
+	if priorityHeader := c.GetHeader("X-Priority"); priorityHeader == "high" {
+		priority = queue.PriorityHigh
+	}
+
 	// Read request body
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -221,8 +233,8 @@ func (h *ProxyHandler) HandleChat(c *gin.Context) {
 		model = req.Model
 	}
 
-	// Submit to queue
-	err = h.queue.Submit(c.Request.Context(), model, func() error {
+	// Submit to queue with priority
+	err = h.queue.Submit(c.Request.Context(), model, priority, func() error {
 		// Track active requests
 		h.metrics.IncActiveRequests(model)
 		defer h.metrics.DecActiveRequests(model)

@@ -74,13 +74,28 @@
             </a>
             <span class="navbar-text">
                 <div class="d-flex align-items-center">
-                    <div id="ollama-status" class="d-flex align-items-center me-3">
+                    <div id="ollama-status" class="d-flex align-items-center me-3"
+                         data-bs-toggle="tooltip"
+                         data-bs-placement="bottom"
+                         title="Ollama LLM Service: Green=Model ready and responding, Yellow=Slow or degraded performance, Red=Service offline or unreachable">
                         <i class="bi bi-server me-1"></i>
                         <span class="badge bg-secondary me-2">Unknown</span>
                         <small class="text-white-50" id="ollama-response-time"></small>
                     </div>
                     <div class="vr mx-2"></div>
-                    <span id="connection-status">
+                    <div id="proxy-status" class="d-flex align-items-center me-3"
+                         data-bs-toggle="tooltip"
+                         data-bs-placement="bottom"
+                         title="Monitoring Proxy: Green=Intercepting and forwarding requests, Yellow=Performance issues, Red=Proxy offline (metrics collection stopped)">
+                        <i class="bi bi-arrow-left-right me-1"></i>
+                        <span class="badge bg-secondary me-2">Unknown</span>
+                        <small class="text-white-50" id="proxy-response-time"></small>
+                    </div>
+                    <div class="vr mx-2"></div>
+                    <span id="connection-status"
+                          data-bs-toggle="tooltip"
+                          data-bs-placement="bottom"
+                          title="WebSocket Connection: Green=Real-time updates active, Red=Connection lost (will auto-reconnect)">
                         <span class="status-indicator status-healthy"></span>
                         Connected
                     </span>
@@ -385,30 +400,127 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
-        // WebSocket connection
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+        // Initialize Bootstrap tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        });
 
-        // Handle incoming WebSocket messages
-        socket.onmessage = function(event) {
-            try {
-                const data = JSON.parse(event.data);
+        // WebSocket connection management
+        let socket = null;
+        let reconnectInterval = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 50;
+        const reconnectDelay = 3000; // 3 seconds
 
-                if (data.summary) {
-                    updateMetrics(data);
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+
+            // Handle incoming WebSocket messages
+            socket.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    updateDashboard(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+
+            // WebSocket event handlers
+            socket.onopen = function() {
+                console.log('Connected to dashboard');
+                reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+
+                // Clear any existing reconnect interval
+                if (reconnectInterval) {
+                    clearInterval(reconnectInterval);
+                    reconnectInterval = null;
                 }
 
-                if (data.ai_status !== undefined) {
-                    updateAIStatus(data.ai_status, data.is_ai_generated);
+                const statusSpan = document.getElementById('connection-status');
+                statusSpan.innerHTML = '<span class="status-indicator status-healthy"></span>Connected';
+
+                // Update tooltip
+                const tooltip = bootstrap.Tooltip.getInstance(statusSpan);
+                if (tooltip) {
+                    tooltip.setContent({ '.tooltip-inner': 'WebSocket connected. Receiving real-time metric updates.' });
+                }
+            };
+
+            socket.onclose = function() {
+                console.log('Disconnected from dashboard');
+                const statusSpan = document.getElementById('connection-status');
+                statusSpan.innerHTML = '<span class="status-indicator status-danger"></span>Disconnected';
+
+                // Update tooltip
+                const tooltip = bootstrap.Tooltip.getInstance(statusSpan);
+                if (tooltip) {
+                    tooltip.setContent({ '.tooltip-inner': 'WebSocket disconnected. Attempting to reconnect...' });
                 }
 
-                if (data.latency_percentiles) {
-                    updateLatencyPercentiles(data.latency_percentiles);
+                // Reset Ollama status to Unknown
+                const ollamaDiv = document.getElementById('ollama-status');
+                const ollamaBadge = ollamaDiv.querySelector('.badge');
+                const ollamaResponseTime = document.getElementById('ollama-response-time');
+                ollamaBadge.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+                ollamaBadge.classList.add('bg-secondary');
+                ollamaBadge.textContent = 'Unknown';
+                ollamaResponseTime.textContent = '';
+
+                const ollamaTooltip = bootstrap.Tooltip.getInstance(ollamaDiv);
+                if (ollamaTooltip) {
+                    ollamaTooltip.setContent({ '.tooltip-inner': 'Connection lost. Unable to determine Ollama status.' });
                 }
-            } catch (error) {
-                console.error('Error processing WebSocket message:', error);
+
+                // Reset Proxy status to Unknown
+                const proxyDiv = document.getElementById('proxy-status');
+                const proxyBadge = proxyDiv.querySelector('.badge');
+                const proxyResponseTime = document.getElementById('proxy-response-time');
+                proxyBadge.classList.remove('bg-success', 'bg-danger', 'bg-warning');
+                proxyBadge.classList.add('bg-secondary');
+                proxyBadge.textContent = 'Unknown';
+                proxyResponseTime.textContent = '';
+
+                const proxyTooltip = bootstrap.Tooltip.getInstance(proxyDiv);
+                if (proxyTooltip) {
+                    proxyTooltip.setContent({ '.tooltip-inner': 'Connection lost. Unable to determine proxy status.' });
+                }
+
+                // Attempt to reconnect
+                if (!reconnectInterval && reconnectAttempts < maxReconnectAttempts) {
+                    reconnectInterval = setInterval(function() {
+                        if (socket.readyState === WebSocket.CLOSED) {
+                            reconnectAttempts++;
+                            console.log(`Attempting to reconnect... (${reconnectAttempts}/${maxReconnectAttempts})`);
+                            connectWebSocket();
+                        }
+                    }, reconnectDelay);
+                }
+            };
+
+            socket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Initial connection
+        connectWebSocket();
+
+        // Update dashboard with WebSocket data
+        function updateDashboard(data) {
+            if (data.summary) {
+                updateMetrics(data);
             }
-        };
+
+            if (data.ai_status !== undefined) {
+                updateAIStatus(data.ai_status, data.is_ai_generated);
+            }
+
+            if (data.latency_percentiles) {
+                updateLatencyPercentiles(data.latency_percentiles);
+            }
+        }
 
         // Chart configurations
         const chartOptions = {
@@ -555,34 +667,93 @@
 
             // Update Ollama status
             if (summary.ollama_status) {
-                const statusBadge = document.querySelector('#ollama-status .badge');
+                const statusDiv = document.getElementById('ollama-status');
+                const statusBadge = statusDiv.querySelector('.badge');
                 const responseTime = document.getElementById('ollama-response-time');
+                const tooltip = bootstrap.Tooltip.getInstance(statusDiv);
 
                 // Update status badge
                 statusBadge.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-secondary');
 
+                let newTooltip = '';
                 switch(summary.ollama_status.status) {
                     case 'healthy':
                         statusBadge.classList.add('bg-success');
                         statusBadge.textContent = 'Healthy';
+                        newTooltip = 'Ollama is running normally. Model is loaded and ready to process requests.';
                         break;
                     case 'unhealthy':
                         statusBadge.classList.add('bg-warning');
                         statusBadge.textContent = 'Unhealthy';
+                        newTooltip = 'Ollama is responding but experiencing issues. Performance may be degraded.';
                         break;
                     case 'offline':
                     case 'timeout':
                         statusBadge.classList.add('bg-danger');
                         statusBadge.textContent = 'Offline';
+                        newTooltip = 'Ollama service is not responding. Check if the service is running on port 11434.';
                         break;
                     default:
                         statusBadge.classList.add('bg-secondary');
                         statusBadge.textContent = 'Unknown';
+                        newTooltip = 'Unable to determine Ollama status. Checking connection...';
+                }
+
+                // Update tooltip
+                if (tooltip) {
+                    tooltip.setContent({ '.tooltip-inner': newTooltip });
                 }
 
                 // Update response time
                 if (summary.ollama_status.response_time !== null) {
                     responseTime.textContent = `${summary.ollama_status.response_time}ms`;
+                } else {
+                    responseTime.textContent = '';
+                }
+            }
+
+            // Update Proxy status
+            if (summary.proxy_status) {
+                const statusDiv = document.getElementById('proxy-status');
+                const statusBadge = statusDiv.querySelector('.badge');
+                const responseTime = document.getElementById('proxy-response-time');
+                const tooltip = bootstrap.Tooltip.getInstance(statusDiv);
+
+                // Update status badge
+                statusBadge.classList.remove('bg-success', 'bg-danger', 'bg-warning', 'bg-secondary');
+
+                let newTooltip = '';
+                switch(summary.proxy_status.status) {
+                    case 'healthy':
+                        statusBadge.classList.add('bg-success');
+                        statusBadge.textContent = 'Healthy';
+                        newTooltip = 'Proxy is intercepting requests and collecting metrics normally on port 11435.';
+                        break;
+                    case 'unhealthy':
+                        statusBadge.classList.add('bg-warning');
+                        statusBadge.textContent = 'Unhealthy';
+                        newTooltip = 'Proxy is running but may have issues. Check logs for errors.';
+                        break;
+                    case 'offline':
+                    case 'timeout':
+                        statusBadge.classList.add('bg-danger');
+                        statusBadge.textContent = 'Offline';
+                        newTooltip = 'Proxy service is down. Metrics are not being collected. Run "make start-proxy" to restart.';
+                        break;
+                    default:
+                        statusBadge.classList.add('bg-secondary');
+                        statusBadge.textContent = 'Unknown';
+                        newTooltip = 'Unable to determine proxy status. Checking connection to metrics port 8001...';
+                }
+
+                // Update tooltip
+                if (tooltip) {
+                    tooltip.setContent({ '.tooltip-inner': newTooltip });
+                }
+
+                // Update response time
+                if (summary.proxy_status.response_time !== null) {
+                    responseTime.textContent = `${summary.proxy_status.response_time}ms`;
                 } else {
                     responseTime.textContent = '';
                 }
@@ -718,22 +889,23 @@
                 });
         }
 
-        // WebSocket event handlers
-        socket.onopen = function() {
-            console.log('Connected to dashboard');
-            document.getElementById('connection-status').innerHTML =
-                '<span class="status-indicator status-healthy"></span>Connected';
-        };
+        // Add refresh button click handler
+        document.getElementById('refresh-status').addEventListener('click', function() {
+            // Add loading indicator
+            const button = this;
+            const originalContent = button.innerHTML;
+            button.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
+            button.disabled = true;
 
-        socket.onclose = function() {
-            console.log('Disconnected from dashboard');
-            document.getElementById('connection-status').innerHTML =
-                '<span class="status-indicator status-danger"></span>Disconnected';
-        };
+            // Load new status
+            loadAIStatus();
 
-        socket.onerror = function(error) {
-            console.error('WebSocket error:', error);
-        };
+            // Reset button after 2 seconds
+            setTimeout(() => {
+                button.innerHTML = originalContent;
+                button.disabled = false;
+            }, 2000);
+        });
 
         // Initial data load
         loadTimeSeriesData();
@@ -769,24 +941,6 @@
         }
 
         loadAIStatus();
-
-        // Add refresh button click handler
-        document.getElementById('refresh-status').addEventListener('click', function() {
-            // Add loading indicator
-            const button = this;
-            const originalContent = button.innerHTML;
-            button.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
-            button.disabled = true;
-
-            // Load new status
-            loadAIStatus();
-
-            // Reset button after 2 seconds
-            setTimeout(() => {
-                button.innerHTML = originalContent;
-                button.disabled = false;
-            }, 2000);
-        });
 
         // Refresh time series data every 30 seconds
         setInterval(loadTimeSeriesData, 30000);
