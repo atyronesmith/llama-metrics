@@ -99,9 +99,9 @@ func (h *ProxyHandler) HandleGenerate(c *gin.Context) {
 
 		// Handle streaming vs non-streaming
 		if req.Stream {
-			h.handleStreamingResponse(c, resp, model, start)
+			h.handleStreamingResponse(c, resp, model, start, priority)
 		} else {
-			h.handleNonStreamingResponse(c, resp, model, start)
+			h.handleNonStreamingResponse(c, resp, model, start, priority)
 		}
 
 		return nil
@@ -113,7 +113,7 @@ func (h *ProxyHandler) HandleGenerate(c *gin.Context) {
 	}
 }
 
-func (h *ProxyHandler) handleStreamingResponse(c *gin.Context, resp *http.Response, model string, start time.Time) {
+func (h *ProxyHandler) handleStreamingResponse(c *gin.Context, resp *http.Response, model string, start time.Time, priority int) {
 	// Set headers for SSE
 	c.Header("Content-Type", "application/x-ndjson")
 	c.Header("Cache-Control", "no-cache")
@@ -158,7 +158,7 @@ func (h *ProxyHandler) handleStreamingResponse(c *gin.Context, resp *http.Respon
 
 	// Record final metrics
 	duration := time.Since(start)
-	h.metrics.RecordRequest(c.Request.Method, c.Request.URL.Path, model, strconv.Itoa(resp.StatusCode), duration)
+	h.metrics.RecordRequestWithPriority(c.Request.Method, c.Request.URL.Path, model, strconv.Itoa(resp.StatusCode), duration, priority)
 
 	// Record token metrics
 	var tokensPerSec float64
@@ -168,7 +168,7 @@ func (h *ProxyHandler) handleStreamingResponse(c *gin.Context, resp *http.Respon
 	h.metrics.RecordTokens(model, totalPromptTokens, totalGeneratedTokens, tokensPerSec)
 }
 
-func (h *ProxyHandler) handleNonStreamingResponse(c *gin.Context, resp *http.Response, model string, start time.Time) {
+func (h *ProxyHandler) handleNonStreamingResponse(c *gin.Context, resp *http.Response, model string, start time.Time, priority int) {
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -195,7 +195,7 @@ func (h *ProxyHandler) handleNonStreamingResponse(c *gin.Context, resp *http.Res
 
 	// Record request metrics
 	duration := time.Since(start)
-	h.metrics.RecordRequest(c.Request.Method, c.Request.URL.Path, model, strconv.Itoa(resp.StatusCode), duration)
+	h.metrics.RecordRequestWithPriority(c.Request.Method, c.Request.URL.Path, model, strconv.Itoa(resp.StatusCode), duration, priority)
 
 	// Copy response headers
 	for key, values := range resp.Header {
@@ -266,9 +266,9 @@ func (h *ProxyHandler) HandleChat(c *gin.Context) {
 
 		// Handle streaming vs non-streaming
 		if req.Stream {
-			h.handleStreamingChatResponse(c, resp, model, start)
+			h.handleStreamingChatResponse(c, resp, model, start, priority)
 		} else {
-			h.handleNonStreamingChatResponse(c, resp, model, start)
+			h.handleNonStreamingChatResponse(c, resp, model, start, priority)
 		}
 
 		return nil
@@ -280,7 +280,7 @@ func (h *ProxyHandler) HandleChat(c *gin.Context) {
 	}
 }
 
-func (h *ProxyHandler) handleStreamingChatResponse(c *gin.Context, resp *http.Response, model string, start time.Time) {
+func (h *ProxyHandler) handleStreamingChatResponse(c *gin.Context, resp *http.Response, model string, start time.Time, priority int) {
 	// Set headers for SSE
 	c.Header("Content-Type", "application/x-ndjson")
 	c.Header("Cache-Control", "no-cache")
@@ -325,7 +325,7 @@ func (h *ProxyHandler) handleStreamingChatResponse(c *gin.Context, resp *http.Re
 
 	// Record final metrics
 	duration := time.Since(start)
-	h.metrics.RecordRequest(c.Request.Method, c.Request.URL.Path, model, strconv.Itoa(resp.StatusCode), duration)
+	h.metrics.RecordRequestWithPriority(c.Request.Method, c.Request.URL.Path, model, strconv.Itoa(resp.StatusCode), duration, priority)
 
 	// Record token metrics
 	var tokensPerSec float64
@@ -335,7 +335,7 @@ func (h *ProxyHandler) handleStreamingChatResponse(c *gin.Context, resp *http.Re
 	h.metrics.RecordTokens(model, totalPromptTokens, totalGeneratedTokens, tokensPerSec)
 }
 
-func (h *ProxyHandler) handleNonStreamingChatResponse(c *gin.Context, resp *http.Response, model string, start time.Time) {
+func (h *ProxyHandler) handleNonStreamingChatResponse(c *gin.Context, resp *http.Response, model string, start time.Time, priority int) {
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -362,7 +362,7 @@ func (h *ProxyHandler) handleNonStreamingChatResponse(c *gin.Context, resp *http
 
 	// Record request metrics
 	duration := time.Since(start)
-	h.metrics.RecordRequest(c.Request.Method, c.Request.URL.Path, model, strconv.Itoa(resp.StatusCode), duration)
+	h.metrics.RecordRequestWithPriority(c.Request.Method, c.Request.URL.Path, model, strconv.Itoa(resp.StatusCode), duration, priority)
 
 	// Copy response headers
 	for key, values := range resp.Header {

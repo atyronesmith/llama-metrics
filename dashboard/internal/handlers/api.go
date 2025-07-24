@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -63,9 +64,16 @@ func (h *APIHandler) GetMetricsSummary(c *gin.Context) {
 		return
 	}
 
+	highPriorityPercentiles, err := h.collector.GetHighPriorityLatencyPercentiles()
+	if err != nil {
+		log.Printf("Error getting high priority percentiles: %v", err)
+		highPriorityPercentiles = nil
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"summary":             summary,
 		"latency_percentiles": percentiles,
+		"high_priority_percentiles": highPriorityPercentiles,
 		"timestamp":          time.Now().Format(time.RFC3339),
 	})
 }

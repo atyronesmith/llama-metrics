@@ -13,6 +13,8 @@ type Collector struct {
 	// Request metrics
 	RequestCount    *prometheus.CounterVec
 	RequestDuration *prometheus.HistogramVec
+	HighPriorityRequestDuration *prometheus.HistogramVec
+	NormalPriorityRequestDuration *prometheus.HistogramVec
 	ActiveRequests  *prometheus.GaugeVec
 
 	// Token metrics
@@ -78,6 +80,24 @@ func NewCollector() *Collector {
 			prometheus.HistogramOpts{
 				Name:    "ollama_proxy_request_duration_seconds",
 				Help:    "Request duration in seconds",
+				Buckets: []float64{0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0},
+			},
+			[]string{"method", "endpoint", "model"},
+		),
+
+		HighPriorityRequestDuration: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ollama_proxy_high_priority_request_duration_seconds",
+				Help:    "High priority request duration in seconds",
+				Buckets: []float64{0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0},
+			},
+			[]string{"method", "endpoint", "model"},
+		),
+
+		NormalPriorityRequestDuration: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "ollama_proxy_normal_priority_request_duration_seconds",
+				Help:    "Normal priority request duration in seconds",
 				Buckets: []float64{0.1, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0, 120.0},
 			},
 			[]string{"method", "endpoint", "model"},
@@ -338,6 +358,20 @@ func NewCollector() *Collector {
 func (c *Collector) RecordRequest(method, endpoint, model, status string, duration time.Duration) {
 	c.RequestCount.WithLabelValues(method, endpoint, model, status).Inc()
 	c.RequestDuration.WithLabelValues(method, endpoint, model).Observe(duration.Seconds())
+}
+
+// RecordRequestWithPriority records metrics for a request including priority-specific latencies
+func (c *Collector) RecordRequestWithPriority(method, endpoint, model, status string, duration time.Duration, priority int) {
+	// Record standard metrics
+	c.RequestCount.WithLabelValues(method, endpoint, model, status).Inc()
+	c.RequestDuration.WithLabelValues(method, endpoint, model).Observe(duration.Seconds())
+
+	// Record priority-specific latencies
+	if priority == 1 { // High priority
+		c.HighPriorityRequestDuration.WithLabelValues(method, endpoint, model).Observe(duration.Seconds())
+	} else { // Normal priority
+		c.NormalPriorityRequestDuration.WithLabelValues(method, endpoint, model).Observe(duration.Seconds())
+	}
 }
 
 // RecordTokens records token metrics from a response

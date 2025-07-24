@@ -125,23 +125,23 @@ func startMetricsBroadcaster(collector *metrics.Collector, hub *websocket.Hub) {
 			percentiles, err := collector.GetLatencyPercentiles()
 			if err != nil {
 				log.Printf("Error getting latency percentiles: %v", err)
-				continue
 			}
 
-			// Get AI status
+			highPriorityPercentiles, err := collector.GetHighPriorityLatencyPercentiles()
+			if err != nil {
+				log.Printf("Error getting high priority percentiles: %v", err)
+			}
+
 			aiStatus, isAIGenerated := collector.GenerateAIStatus(summary, percentiles)
 
-			// Prepare broadcast data
-			data := map[string]interface{}{
-				"summary":            summary,
+			hub.Broadcast(gin.H{
+				"summary":             summary,
 				"latency_percentiles": percentiles,
-				"timestamp":          time.Now().Format(time.RFC3339),
+				"high_priority_percentiles": highPriorityPercentiles,
 				"ai_status":          aiStatus,
-				"is_ai_generated":    isAIGenerated,
-			}
-
-			// Broadcast to all connected clients
-			hub.Broadcast(data)
+				"ai_generated":       isAIGenerated,
+				"timestamp":          time.Now().Format(time.RFC3339),
+			})
 		}
 	}
 }
