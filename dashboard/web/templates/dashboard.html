@@ -295,6 +295,33 @@
                     </div>
                 </div>
             </div>
+            <div class="col-md-4">
+                <div class="card h-100" title="Prometheus Query: histogram_quantile(0.5/0.75/0.95/0.99, rate(ollama_proxy_high_priority_request_duration_seconds_bucket[5m]))">
+                    <div class="card-header">
+                        <h6 class="mb-0"><i class="bi bi-lightning-fill text-warning"></i> High Priority Latency</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-3">
+                                <div class="h5 mb-0" id="hp_p50">0.0s</div>
+                                <small class="text-muted">P50</small>
+                            </div>
+                            <div class="col-3">
+                                <div class="h5 mb-0" id="hp_p75">0.0s</div>
+                                <small class="text-muted">P75</small>
+                            </div>
+                            <div class="col-3">
+                                <div class="h5 mb-0" id="hp_p95">0.0s</div>
+                                <small class="text-muted">P95</small>
+                            </div>
+                            <div class="col-3">
+                                <div class="h5 mb-0" id="hp_p99">0.0s</div>
+                                <small class="text-muted">P99</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Charts Row -->
@@ -520,6 +547,13 @@
             if (data.latency_percentiles) {
                 updateLatencyPercentiles(data.latency_percentiles);
             }
+
+            if (data.high_priority_percentiles) {
+                updateHighPriorityPercentiles(data.high_priority_percentiles);
+            }
+
+            // Update last updated time
+            document.getElementById('last-updated').textContent = new Date(data.timestamp).toLocaleTimeString();
         }
 
         // Chart configurations
@@ -803,6 +837,12 @@
             document.getElementById('p95').textContent = safeNumber(percentiles.p95, 2) === '--' ? '--' : safeNumber(percentiles.p95, 2) + 's';
             document.getElementById('p99').textContent = safeNumber(percentiles.p99, 2) === '--' ? '--' : safeNumber(percentiles.p99, 2) + 's';
 
+            // Update high priority percentiles
+            document.getElementById('hp_p50').textContent = safeNumber(percentiles.hp_p50, 2) === '--' ? '--' : safeNumber(percentiles.hp_p50, 2) + 's';
+            document.getElementById('hp_p75').textContent = safeNumber(percentiles.hp_p75, 2) === '--' ? '--' : safeNumber(percentiles.hp_p75, 2) + 's';
+            document.getElementById('hp_p95').textContent = safeNumber(percentiles.hp_p95, 2) === '--' ? '--' : safeNumber(percentiles.hp_p95, 2) + 's';
+            document.getElementById('hp_p99').textContent = safeNumber(percentiles.hp_p99, 2) === '--' ? '--' : safeNumber(percentiles.hp_p99, 2) + 's';
+
             // Update last updated time
             document.getElementById('last-updated').textContent = new Date(data.timestamp).toLocaleTimeString();
         }
@@ -812,8 +852,18 @@
                 Object.entries(percentiles).forEach(([key, value]) => {
                     const element = document.getElementById(key);
                     if (element) {
-                        const formatted = safeNumber(value, 3);
-                        element.textContent = formatted === '--' ? '--' : formatted + 's';
+                        element.textContent = value !== null ? value.toFixed(2) + 's' : '--';
+                    }
+                });
+            }
+        }
+
+        function updateHighPriorityPercentiles(percentiles) {
+            if (percentiles) {
+                Object.entries(percentiles).forEach(([key, value]) => {
+                    const element = document.getElementById('hp_' + key);
+                    if (element) {
+                        element.textContent = value !== null ? value.toFixed(2) + 's' : '--';
                     }
                 });
             }
@@ -847,6 +897,9 @@
                     }
                     if (data.latency_percentiles) {
                         updateLatencyPercentiles(data.latency_percentiles);
+                    }
+                    if (data.high_priority_percentiles) {
+                        updateHighPriorityPercentiles(data.high_priority_percentiles);
                     }
                 })
                 .catch(error => {

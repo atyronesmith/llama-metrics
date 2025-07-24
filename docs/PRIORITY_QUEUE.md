@@ -60,6 +60,16 @@ New Prometheus metrics for monitoring priority queues:
 - `ollama_proxy_queue_normal_priority_count`: Current number of normal priority requests in queue
 - `ollama_proxy_queue_high_priority_wait_time_seconds`: Wait time histogram for high priority requests
 - `ollama_proxy_queue_normal_priority_wait_time_seconds`: Wait time histogram for normal priority requests
+- `ollama_proxy_high_priority_request_duration_seconds`: Request latency histogram for high priority requests
+- `ollama_proxy_normal_priority_request_duration_seconds`: Request latency histogram for normal priority requests
+
+### Dashboard Display
+
+The monitoring dashboard now shows:
+- **Regular Latency Percentiles**: P50, P75, P95, P99 for all requests
+- **High Priority Latency Percentiles**: P50, P75, P95, P99 specifically for high priority requests
+
+This allows you to verify that high priority requests are indeed being processed faster than normal priority ones.
 
 ## Testing
 

@@ -179,6 +179,30 @@ func (c *Collector) GetLatencyPercentiles() (map[string]interface{}, error) {
 	return percentiles, nil
 }
 
+// GetHighPriorityLatencyPercentiles retrieves latency percentiles for high priority requests
+func (c *Collector) GetHighPriorityLatencyPercentiles() (map[string]interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	percentiles := make(map[string]interface{})
+	quantiles := []int{50, 75, 95, 99}
+
+	for _, p := range quantiles {
+		quantile := float64(p) / 100.0
+		query := fmt.Sprintf(`histogram_quantile(%f, rate(ollama_proxy_high_priority_request_duration_seconds_bucket[5m]))`, quantile)
+
+		value, err := c.queryScalar(ctx, query)
+		if err != nil {
+			log.Printf("Error querying high priority p%d: %v", p, err)
+			percentiles[fmt.Sprintf("p%d", p)] = nil
+		} else {
+			percentiles[fmt.Sprintf("p%d", p)] = toMetricValue(value)
+		}
+	}
+
+	return percentiles, nil
+}
+
 // GetTimeSeriesData retrieves time series data for charts
 func (c *Collector) GetTimeSeriesData(hours int) (map[string]interface{}, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
