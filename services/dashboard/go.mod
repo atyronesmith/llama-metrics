@@ -3,11 +3,14 @@ module github.com/atyronesmith/llamastack-prometheus/dashboard
 go 1.24.4
 
 require (
-	github.com/gin-gonic/gin v1.10.1
-	github.com/gorilla/websocket v1.5.3
-	github.com/prometheus/client_golang v1.22.0
-	github.com/prometheus/common v0.65.0
+	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/websocket v1.5.0
+	github.com/llama-metrics/shared v0.0.0-00010101000000-000000000000
+	github.com/prometheus/client_golang v1.17.0
+	github.com/prometheus/common v0.44.0
 )
+
+replace github.com/llama-metrics/shared => ../shared
 
 require (
 	github.com/bytedance/sonic v1.11.6 // indirect
