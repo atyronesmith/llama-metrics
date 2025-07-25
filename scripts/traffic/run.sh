@@ -161,7 +161,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Use the venv Python from project root
-CMD="$PROJECT_DIR/venv/bin/python $SCRIPT_DIR/traffic_generator.py --model $DEFAULT_MODEL --url $DEFAULT_URL --delay $DEFAULT_DELAY"
+CMD="$PROJECT_DIR/venv/bin/python $SCRIPT_DIR/generator.py --model $DEFAULT_MODEL --url $DEFAULT_URL --delay $DEFAULT_DELAY"
 
 if [ -n "$DEFAULT_MAX" ]; then
     CMD="$CMD --max $DEFAULT_MAX"
