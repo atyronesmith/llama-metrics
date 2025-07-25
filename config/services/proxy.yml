@@ -1,0 +1,65 @@
+# Ollama Monitoring Proxy Configuration
+service:
+  name: ollama-proxy
+  version: ${VERSION:-1.0.0}
+  description: "Monitoring proxy for Ollama AI models"
+
+# Server configuration
+server:
+  proxy_port: 11435
+  metrics_port: 8001
+  host: "0.0.0.0"
+  read_timeout: 30s
+  write_timeout: 30s
+  idle_timeout: 60s
+
+# Ollama backend configuration
+ollama:
+  url: "http://localhost:11434"
+  timeout: 30s
+  max_retries: 3
+  retry_delay: 1s
+
+# Queue configuration
+queue:
+  max_size: 100
+  max_concurrency: 4
+  worker_timeout: 60s
+
+# Monitoring configuration
+monitoring:
+  metrics_path: "/metrics"
+  health_path: "/health"
+  metrics_namespace: "llama_metrics"
+  enable_detailed_metrics: true
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+
+# Rate limiting
+rate_limiting:
+  enabled: true
+  requests_per_minute: 60
+  burst_size: 10
+
+# CORS configuration
+cors:
+  enabled: true
+  allowed_origins: ["*"]
+  allowed_methods: ["GET", "POST", "OPTIONS"]
+  allowed_headers: ["Content-Type", "Authorization"]
+
+# Security
+security:
+  enable_tls: false
+  cert_file: ""
+  key_file: ""
+
+# Feature flags
+features:
+  enable_mac_metrics: true
+  enable_request_logging: true
+  enable_performance_profiling: false

@@ -40,7 +40,11 @@ The real-time dashboard provides comprehensive monitoring of your Ollama LLM per
 ├── simple_metrics_server.py      # Lightweight metrics server
 ├── app.py                        # LlamaIndex-based app (advanced)
 ├── run_prometheus.sh             # Prometheus setup script
-├── prometheus.yml                # Prometheus configuration
+├── config/                       # Configuration files
+│   ├── prometheus/
+│   │   └── prometheus.yml        # Prometheus configuration
+│   ├── services/                 # Service-specific configs
+│   └── alerts/                   # Alert rules
 ├── questions/                    # Question categories (10 files)
 │   ├── general_knowledge.json
 │   ├── science.json
@@ -170,7 +174,7 @@ python traffic_generator.py --model llama2
 
 ### Prometheus Configuration
 
-The included `prometheus.yml` is configured to scrape:
+The included `config/prometheus/prometheus.yml` is configured to scrape:
 
 - **Target**: `host.containers.internal:8000`
 - **Interval**: 15 seconds

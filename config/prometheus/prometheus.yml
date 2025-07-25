@@ -1,0 +1,78 @@
+global:
+  scrape_interval: 15s # How often to scrape metrics
+  evaluation_interval: 15s # How often to evaluate rules
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "../alerts/rules.yml"
+
+# Scraping configuration
+scrape_configs:
+  # Ollama Monitoring Proxy - Main LLM request metrics
+  - job_name: 'ollama-proxy'
+    static_configs:
+      - targets: ['host.containers.internal:8001']
+        labels:
+          service: 'proxy'
+          component: 'ollama-monitoring'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Dashboard Service - Real-time dashboard metrics
+  - job_name: 'llama-dashboard'
+    static_configs:
+      - targets: ['host.containers.internal:3001']
+        labels:
+          service: 'dashboard'
+          component: 'web-interface'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Health Checker Service - System health metrics
+  - job_name: 'llama-health'
+    static_configs:
+      - targets: ['host.containers.internal:8080']
+        labels:
+          service: 'health'
+          component: 'health-checker'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Mac System Metrics (macOS only)
+  - job_name: 'mac-system-metrics'
+    static_configs:
+      - targets: ['host.containers.internal:8002']
+        labels:
+          service: 'system'
+          component: 'mac-metrics'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'metrics-storage'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Note: Ollama itself doesn't expose Prometheus metrics by default
+  # If you enable Ollama metrics in the future, add this job:
+  # - job_name: 'ollama-direct'
+  #   static_configs:
+  #     - targets: ['host.containers.internal:11434']
+  #   metrics_path: '/metrics'
+  #   scrape_timeout: 10s
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093

@@ -1,0 +1,104 @@
+# Llama Health Checker Configuration
+service:
+  name: llama-health
+  version: ${VERSION:-1.0.0}
+  description: "Health monitoring and analysis service"
+
+# Server configuration
+server:
+  port: 8080
+  host: "0.0.0.0"
+  read_timeout: 30s
+  write_timeout: 30s
+
+# Services to monitor
+services:
+  ollama:
+    url: "http://localhost:11434"
+    timeout: 10s
+    check_interval: 30s
+  proxy:
+    url: "http://localhost:11435"
+    timeout: 5s
+    check_interval: 30s
+  dashboard:
+    url: "http://localhost:3001"
+    timeout: 5s
+    check_interval: 60s
+  prometheus:
+    url: "http://localhost:9090"
+    timeout: 10s
+    check_interval: 60s
+
+# Health check configuration
+health_checks:
+  # System resource thresholds
+  system:
+    max_cpu_usage: 80.0
+    max_memory_usage: 85.0
+    max_disk_usage: 90.0
+    min_free_memory_mb: 1024
+
+  # Service-specific checks
+  ollama:
+    check_models: true
+    max_response_time_ms: 5000
+    check_gpu_usage: true
+    max_gpu_temp: 85.0
+
+  # Network checks
+  network:
+    check_connectivity: true
+    dns_servers: ["8.8.8.8", "1.1.1.1"]
+
+# Monitoring configuration
+monitoring:
+  metrics_path: "/metrics"
+  health_path: "/health"
+  check_interval: 30s
+  history_retention: "7d"
+
+# Alerting configuration
+alerting:
+  enabled: true
+  channels:
+    - type: "log"
+      level: "warn"
+    # - type: "webhook"
+    #   url: "http://localhost:9093/api/v1/alerts"
+    # - type: "email"
+    #   smtp_server: "smtp.example.com"
+    #   recipients: ["admin@example.com"]
+
+# AI Analysis configuration
+ai_analysis:
+  enabled: true
+  provider: "ollama"
+  model: "phi3:mini"
+  analysis_interval: "5m"
+  confidence_threshold: 0.7
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  include_stack_trace: false
+
+# Database configuration (for history)
+database:
+  type: "sqlite"
+  path: "./data/health.db"
+  max_connections: 10
+
+# API configuration
+api:
+  enable_cors: true
+  rate_limit: 50
+  auth_required: false
+
+# Features
+features:
+  enable_predictions: true
+  enable_remediation_suggestions: true
+  enable_performance_analysis: true
+  collect_detailed_metrics: true
