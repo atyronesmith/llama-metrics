@@ -36,29 +36,30 @@ The real-time dashboard provides comprehensive monitoring of your Ollama LLM per
 ## 📁 Project Structure
 
 ```
-├── traffic_generator.py          # Main traffic generator
-├── simple_metrics_server.py      # Lightweight metrics server
-├── app.py                        # LlamaIndex-based app (advanced)
-├── run_prometheus.sh             # Prometheus setup script
+├── services/                     # Go services
+│   ├── shared/                   # Shared packages
+│   ├── proxy/                    # Monitoring proxy
+│   ├── dashboard/                # Web dashboard
+│   └── health/                   # Health checker
+├── scripts/                      # Automation scripts
+│   ├── traffic/                  # Traffic generation
+│   ├── monitoring/               # Monitoring tools
+│   └── deployment/               # Installation scripts
 ├── config/                       # Configuration files
 │   ├── prometheus/
 │   │   └── prometheus.yml        # Prometheus configuration
 │   ├── services/                 # Service-specific configs
 │   └── alerts/                   # Alert rules
-├── questions/                    # Question categories (10 files)
-│   ├── general_knowledge.json
-│   ├── science.json
-│   ├── technology.json
-│   ├── history.json
-│   ├── geography.json
-│   ├── sports.json
-│   ├── entertainment.json
-│   ├── literature.json
-│   ├── philosophy.json
-│   └── food.json
-├── requirements_traffic.txt      # Minimal dependencies
-├── requirements_app.txt          # Full LlamaIndex dependencies
-└── README_traffic_generator.md   # Detailed traffic generator docs
+├── docs/                         # Documentation
+│   ├── setup/                    # Installation guides
+│   ├── architecture/             # System design
+│   ├── api/                      # API reference
+│   └── development/              # Contributing guides
+├── test/                         # Test files and data
+│   ├── unit/                     # Unit tests
+│   └── data/                     # Test data
+│       └── questions/            # Question categories (10 files)
+└── README.md                     # This file
 ```
 
 ## 🚀 Quick Start
@@ -170,22 +171,32 @@ python traffic_generator.py --model llama2
 - `traffic_questions_asked_total{category}` - Questions by category
 - Standard Python metrics (GC, memory, etc.)
 
+## 📖 Documentation
+
+For detailed documentation, visit the [`docs/`](docs/) directory:
+
+- **[Quick Start](docs/setup/quick_start.md)**: Get up and running in 5 minutes
+- **[Installation Guide](docs/setup/installation.md)**: Complete setup instructions
+- **[Architecture Overview](docs/architecture/overview.md)**: System design and components
+- **[API Reference](docs/api/overview.md)**: API documentation and integration
+- **[Contributing Guide](docs/development/contributing.md)**: Development guidelines
+
 ## 🛠️ Configuration
 
-### Prometheus Configuration
+Configuration is organized in the [`config/`](config/) directory:
 
-The included `config/prometheus/prometheus.yml` is configured to scrape:
+- **[Services](config/services/)**: Service-specific configurations
+- **[Prometheus](config/prometheus/)**: Monitoring configuration
+- **[Alerts](config/alerts/)**: Alert rules and notifications
 
-- **Target**: `host.containers.internal:8000`
-- **Interval**: 15 seconds
-- **Job**: `llamastack_app`
+### Quick Configuration
 
-### Traffic Generator Options
+The main configuration file is [`config/llama-metrics.yml`](config/llama-metrics.yml) with settings for:
 
-- `--model`: Ollama model to use (default: `phi3:mini`)
-- `--url`: Ollama API URL (default: `http://localhost:11434`)
-- `--max`: Maximum questions to ask (default: unlimited)
-- `--delay`: Delay between requests in seconds (default: 1.0)
+- Service ports and endpoints
+- Model configurations
+- Monitoring thresholds
+- Performance tuning options
 
 ## 🔧 Advanced Usage
 
