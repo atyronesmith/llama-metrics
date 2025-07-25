@@ -4,27 +4,37 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
+
+	sharedconfig "github.com/llama-metrics/shared/config"
 )
 
 // Config holds the proxy configuration
 type Config struct {
+	sharedconfig.BaseConfig
+	sharedconfig.OllamaConfig
+
+	// Proxy-specific fields
 	OllamaHost     string
 	OllamaPort     int
 	ProxyPort      int
-	MetricsPort    int
-	LogLevel       string
 	MaxQueueSize   int
 	MaxConcurrency int
 }
 
 // DefaultConfig returns a Config with default values
 func DefaultConfig() *Config {
+	base := sharedconfig.DefaultBaseConfig("ollama-proxy")
+
 	return &Config{
+		BaseConfig: base,
+		OllamaConfig: sharedconfig.OllamaConfig{
+			URL:     "http://localhost:11434",
+			Timeout: 30 * time.Second,
+		},
 		OllamaHost:     "localhost",
 		OllamaPort:     11434,
 		ProxyPort:      11435,
-		MetricsPort:    8001,
-		LogLevel:       "info",
 		MaxQueueSize:   100,
 		MaxConcurrency: 4,  // Reduced to prevent Ollama overload
 	}
@@ -41,6 +51,10 @@ func (c *Config) LoadFromFlags() {
 	flag.IntVar(&c.MaxConcurrency, "max-concurrency", c.MaxConcurrency, "Maximum concurrent requests to Ollama")
 
 	flag.Parse()
+
+	// Update shared config fields
+	c.Port = c.ProxyPort
+	c.OllamaConfig.URL = c.OllamaURL()
 }
 
 // LoadFromEnv loads configuration from environment variables
@@ -72,20 +86,25 @@ func (c *Config) LoadFromEnv() {
 	if concurrency := os.Getenv("MAX_CONCURRENCY"); concurrency != "" {
 		fmt.Sscanf(concurrency, "%d", &c.MaxConcurrency)
 	}
+
+	// Update shared config fields
+	c.Port = c.ProxyPort
+	c.OllamaConfig.URL = c.OllamaURL()
 }
 
 // Validate checks if the configuration is valid
 func (c *Config) Validate() error {
+	// Validate base config first
+	if err := c.BaseConfig.Validate(); err != nil {
+		return err
+	}
+
 	if c.OllamaPort <= 0 || c.OllamaPort > 65535 {
 		return fmt.Errorf("invalid Ollama port: %d", c.OllamaPort)
 	}
 
 	if c.ProxyPort <= 0 || c.ProxyPort > 65535 {
 		return fmt.Errorf("invalid proxy port: %d", c.ProxyPort)
-	}
-
-	if c.MetricsPort <= 0 || c.MetricsPort > 65535 {
-		return fmt.Errorf("invalid metrics port: %d", c.MetricsPort)
 	}
 
 	if c.ProxyPort == c.MetricsPort {

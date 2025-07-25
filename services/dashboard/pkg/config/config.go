@@ -3,23 +3,39 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
+
+	sharedconfig "github.com/llama-metrics/shared/config"
 )
 
 // Config holds the configuration for the dashboard
 type Config struct {
-	Port          int
+	sharedconfig.BaseConfig
+	sharedconfig.PrometheusConfig
+	sharedconfig.OllamaConfig
+
+	// Dashboard-specific fields
 	Environment   string
 	PrometheusURL string
-	OllamaURL     string
 }
 
 // LoadConfig loads configuration from environment variables with defaults
 func LoadConfig() *Config {
+	base := sharedconfig.DefaultBaseConfig("llama-dashboard")
+	base.Port = 3001 // Dashboard default port
+
 	cfg := &Config{
-		Port:          3001,
+		BaseConfig: base,
+		PrometheusConfig: sharedconfig.PrometheusConfig{
+			MetricsPath:      "/metrics",
+			MetricsNamespace: "llama_metrics",
+		},
+		OllamaConfig: sharedconfig.OllamaConfig{
+			URL:     "http://localhost:11434",
+			Timeout: 30 * time.Second,
+		},
 		Environment:   "development",
 		PrometheusURL: "http://localhost:9090",
-		OllamaURL:     "http://localhost:11434",
 	}
 
 	// Override with environment variables if set
@@ -38,8 +54,12 @@ func LoadConfig() *Config {
 	}
 
 	if ollamaURL := os.Getenv("OLLAMA_URL"); ollamaURL != "" {
-		cfg.OllamaURL = ollamaURL
+		cfg.OllamaConfig.URL = ollamaURL
 	}
+
+	// Load shared config from environment
+	cfg.MetricsPort = sharedconfig.LoadEnvInt("METRICS_PORT", cfg.MetricsPort)
+	cfg.LogLevel = sharedconfig.LoadEnvString("LOG_LEVEL", cfg.LogLevel)
 
 	return cfg
 }

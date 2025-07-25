@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
+	sharedconfig "github.com/llama-metrics/shared/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -13,6 +15,11 @@ type Config struct {
 	Server     ServerConfig     `yaml:"server"`
 	Models     ModelConfig      `yaml:"models"`
 	Monitoring MonitoringConfig `yaml:"monitoring"`
+
+	// Embedded shared configs for consistency
+	BaseConfig       sharedconfig.BaseConfig       `yaml:"-"`
+	PrometheusConfig sharedconfig.PrometheusConfig `yaml:"-"`
+	OllamaConfig     sharedconfig.OllamaConfig     `yaml:"-"`
 }
 
 // ServerConfig represents server configuration
@@ -89,6 +96,21 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 	if config.Models.DefaultModel == "" {
 		config.Models.DefaultModel = "phi3:mini"
+	}
+
+	// Initialize shared configs
+	config.BaseConfig = sharedconfig.DefaultBaseConfig("llama-health")
+	config.BaseConfig.Port = 8080 // Health check service port
+	config.BaseConfig.MetricsPort = config.Server.MetricsPort
+
+	config.PrometheusConfig = sharedconfig.PrometheusConfig{
+		MetricsPath:      "/metrics",
+		MetricsNamespace: "llama_metrics",
+	}
+
+	config.OllamaConfig = sharedconfig.OllamaConfig{
+		URL:     config.Server.OllamaURL,
+		Timeout: time.Duration(config.Monitoring.RequestTimeout) * time.Second,
 	}
 
 	return &config, nil

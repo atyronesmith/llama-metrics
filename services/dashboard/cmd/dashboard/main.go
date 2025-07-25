@@ -38,7 +38,7 @@ func main() {
 	promAPI := v1.NewAPI(client)
 
 	// Create metrics collector
-	metricsCollector := metrics.NewCollector(promAPI, cfg.OllamaURL)
+	metricsCollector := metrics.NewCollector(promAPI, cfg.OllamaConfig.URL)
 
 	// Create WebSocket hub
 	wsHub := websocket.NewHub()
