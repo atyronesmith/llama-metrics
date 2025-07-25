@@ -1,0 +1,71 @@
+# Llama Dashboard Configuration
+service:
+  name: llama-dashboard
+  version: ${VERSION:-1.0.0}
+  description: "Real-time monitoring dashboard for Ollama metrics"
+
+# Server configuration
+server:
+  port: 3001
+  host: "0.0.0.0"
+  read_timeout: 30s
+  write_timeout: 30s
+
+# External service URLs
+services:
+  prometheus_url: "http://localhost:9090"
+  ollama_url: "http://localhost:11434"
+  proxy_url: "http://localhost:11435"
+
+# Dashboard configuration
+dashboard:
+  title: "Ollama LLM Monitoring"
+  refresh_interval: 5s
+  auto_refresh: true
+  theme: "dark"
+
+# WebSocket configuration
+websocket:
+  path: "/ws"
+  ping_interval: 30s
+  pong_timeout: 60s
+  max_connections: 100
+
+# Metrics collection
+metrics:
+  collection_interval: 10s
+  history_retention: "24h"
+  enable_ai_analysis: true
+
+# UI Configuration
+ui:
+  show_system_metrics: true
+  show_gpu_metrics: true
+  show_queue_metrics: true
+  chart_history_points: 100
+
+# API configuration
+api:
+  base_path: "/api"
+  enable_cors: true
+  rate_limit: 100
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "text"
+  access_log: true
+
+# Cache configuration
+cache:
+  metrics_ttl: "30s"
+  static_files_ttl: "1h"
+
+# Environment
+environment: "development"
+
+# Features
+features:
+  enable_alerts: true
+  enable_predictions: false
+  enable_export: true

@@ -436,7 +436,7 @@ validate: lint
 	else \
 		echo "$(RED)❌ Virtual environment missing$(NC)"; \
 	fi
-	@if [ -f "docs/prometheus_config.yml" ]; then \
+	@if [ -f "config/prometheus/prometheus.yml" ]; then \
 		echo "$(GREEN)✅ Prometheus config exists$(NC)"; \
 	else \
 		echo "$(RED)❌ Prometheus config missing$(NC)"; \
