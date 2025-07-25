@@ -353,24 +353,24 @@ logs-proxy:
 
 ## traffic: Generate traffic (interactive mode)
 traffic: venv
-	@./scripts/run_traffic_generator.sh
+	@./scripts/traffic/run.sh
 
 ## traffic-quick: Quick traffic test (10 requests)
 traffic-quick: venv
-	@./scripts/run_traffic_generator.sh --quick
+	@./scripts/traffic/run.sh --quick
 
 ## traffic-demo: Demo traffic (50 requests)
 traffic-demo: venv
-	@./scripts/run_traffic_generator.sh --demo
+	@./scripts/traffic/run.sh --demo
 
 ## traffic-stress: Stress test (1000 requests)
 traffic-stress: venv
-	@./scripts/run_traffic_generator.sh --stress
+	@./scripts/traffic/run.sh --stress
 
 ## traffic-continuous: Continuous traffic generation
 traffic-continuous: venv
 	@echo "$(BLUE)Starting continuous traffic generation...$(NC)"
-	@./generate_traffic.sh
+	@./scripts/traffic/simple.sh
 
 
 ## metrics: Show current metrics
@@ -519,7 +519,7 @@ watch-metrics:
 benchmark: venv
 	@echo "$(BLUE)Running performance benchmark...$(NC)"
 	@$(PYTHON) -c "print('Starting benchmark with 100 requests...')"
-	@./scripts/run_traffic_generator.sh --quick
+	@./scripts/traffic/run.sh --quick
 	@sleep 2
 	@make metrics
 
