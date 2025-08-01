@@ -13,8 +13,9 @@ This is a comprehensive Ollama monitoring solution featuring:
 ## Architecture
 
 ### Service Architecture
-- **Go workspace**: Multi-module workspace with shared packages (`go.work`)
+- **Go workspace**: Multi-module workspace with shared packages (`services/go.work`)
 - **Services structure**: Proxy, Dashboard, Health checker, and Shared libraries
+- **Python components**: Organized in `python/` directory with shared utilities and containerization
 - **Monitoring flow**: `[Traffic] → [Go Proxy :11435] → [Ollama :11434] → [Metrics :8001]`
 
 ### Key Components
@@ -24,9 +25,18 @@ This is a comprehensive Ollama monitoring solution featuring:
    - `health/`: Health checker with AI-powered analysis
    - `shared/`: Common configuration, models, and metrics packages
 
-2. **Python Scripts**: Traffic generation and legacy metrics servers
-3. **Configuration**: Centralized YAML-based configuration management
-4. **Testing**: Comprehensive test framework with unit, integration, and e2e tests
+2. **Python Components** (`python/`):
+   - `shared/`: Common utilities (config_manager.py, version.py)
+   - `container/`: Docker containerization files
+   - `requirements*.txt`: Dependency specifications for different use cases
+
+3. **Script Libraries** (`scripts/`):
+   - `traffic/`: Load testing and traffic generation scripts
+   - `monitoring/`: System monitoring utilities
+   - `deployment/`: Installation and deployment scripts
+
+4. **Configuration**: Centralized YAML-based configuration management
+5. **Testing**: Comprehensive test framework with unit, integration, and e2e tests
 
 ## Essential Commands
 
@@ -86,25 +96,28 @@ make logs                # Tail all service logs
 ## Go Development
 
 ### Workspace Structure
-- Uses Go 1.24.4 with workspace mode (`go.work`)
+- Uses Go 1.24.4 with workspace mode (`services/go.work`)
+- Workspace files located in `services/` directory to contain all Go-related files
 - Each service has its own module with standardized Makefile
 - Shared packages for common functionality
 
 ### Build Process
 ```bash
-# Individual services
+# Individual services (from project root)
 cd services/proxy && make build
 cd services/dashboard && make build
 cd services/health && make build
 
-# All services from root
-make build-all
+# All services from root (recommended)
+make build              # Build proxy and dashboard
+make build-all          # Build for multiple platforms
 ```
 
 ### Service Dependencies
 - All Go services depend on `services/shared` module
 - Shared packages: `config`, `metrics`, `models`
-- Use `go mod tidy` in each service directory for dependency management
+- Workspace manages dependencies across all modules automatically
+- Use `go work sync` from `services/` directory to update workspace dependencies
 
 ## Python Environment
 
@@ -117,6 +130,15 @@ python script.py
 # Or use venv Python directly
 ./venv/bin/python script.py
 ```
+
+### Python Package Structure
+- **Dependencies**: Located in `python/requirements*.txt`
+  - `requirements.txt`: Minimal dependencies for traffic generation
+  - `requirements_all.txt`: Complete dependency set
+  - `requirements_app.txt`: Dependencies for advanced features
+  - `requirements_traffic.txt`: Traffic generation specific dependencies
+- **Shared utilities**: `python/shared/` contains reusable Python modules
+- **Container support**: `python/container/Dockerfile` for containerized deployments
 
 ## Configuration Management
 
@@ -182,8 +204,9 @@ make test-ci            # CI-friendly test run
 ### Adding New Go Service
 1. Create service directory under `services/`
 2. Copy and customize `services/Makefile.template`
-3. Add module to `go.work`
+3. Add module to `services/go.work`
 4. Use shared packages for common functionality
+5. Run `go work sync` from `services/` directory to update workspace
 
 ### Adding New Metrics
 1. Define metrics in `services/shared/metrics/`
@@ -207,8 +230,9 @@ make logs-proxy          # Proxy-specific logs
 
 ### Build Issues
 - Ensure Go 1.24.4+ is installed
-- Run `go mod tidy` in service directories
-- Check `go.work` includes all required modules
+- Run `go work sync` from `services/` directory to sync workspace
+- Check `services/go.work` includes all required modules
+- Individual service `go mod tidy` should rarely be needed due to workspace
 
 ### Service Issues
 - Use `make status` to check service states

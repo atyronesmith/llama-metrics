@@ -7,8 +7,8 @@
 .DEFAULT_GOAL := help
 
 # Go build targets
-GO_PROXY_DIR := proxy
-GO_DASHBOARD_DIR := dashboard
+GO_PROXY_DIR := services/proxy
+GO_DASHBOARD_DIR := services/dashboard
 
 # Variables
 VENV := venv
@@ -68,15 +68,15 @@ build-dashboard:
 ## build-health: Build the health checker
 build-health:
 	@echo "$(BLUE)Building health checker...$(NC)"
-	@cd health && make build
-	@echo "$(GREEN)✅ Health checker built: health/build/healthcheck$(NC)"
+	@cd services/health && make build
+	@echo "$(GREEN)✅ Health checker built: services/health/build/healthcheck$(NC)"
 
 ## build-all: Build all components for all platforms
 build-all:
 	@echo "$(BLUE)Building all components for multiple platforms...$(NC)"
 	@cd $(GO_PROXY_DIR) && make build-all
 	@cd $(GO_DASHBOARD_DIR) && make build-all
-	@cd health && make build
+	@cd services/health && make build
 	@echo "$(GREEN)✅ All platform builds complete$(NC)"
 
 ## run-proxy: Run the proxy directly with optimized settings (for debugging)
@@ -186,7 +186,7 @@ venv:
 install: venv
 	@echo "$(BLUE)Installing Python dependencies...$(NC)"
 	@$(PIP) install --upgrade pip
-	@$(PIP) install -r requirements_all.txt
+	@$(PIP) install -r python/requirements_all.txt
 	@echo "$(GREEN)✅ All dependencies installed$(NC)"
 	@echo ""
 	@echo "$(YELLOW)⚡ Performance Recommendations:$(NC)"
@@ -249,8 +249,8 @@ start-proxy:
 	@if ! pgrep -f "ollama-proxy" > /dev/null; then \
 		echo "$(BLUE)Building and starting Go monitoring proxy...$(NC)"; \
 		echo "$(YELLOW)Using max concurrency of 4 to match Ollama's capabilities$(NC)"; \
-		cd proxy && make build && ./build/ollama-proxy --max-concurrency 4 > ../proxy.log 2>&1 & \
-		cd ..; \
+		cd services/proxy && make build && ./build/ollama-proxy --max-concurrency 4 > ../../proxy.log 2>&1 & \
+		cd ../..; \
 		sleep 2; \
 		echo "$(GREEN)✅ Go monitoring proxy started with concurrency limit of 4$(NC)"; \
 	else \
@@ -381,32 +381,32 @@ metrics:
 ## health: Check health of all services
 health: build-health
 	@echo "$(BLUE)Checking comprehensive system health...$(NC)"
-	@health/build/healthcheck -mode cli -check comprehensive
+	@services/health/build/healthcheck -mode cli -check comprehensive
 
 ## health-simple: Quick health check
 health-simple: build-health
 	@echo "$(BLUE)Quick health check...$(NC)"
-	@health/build/healthcheck -mode cli -check simple
+	@services/health/build/healthcheck -mode cli -check simple
 
 ## health-readiness: Check if system is ready
 health-readiness: build-health
 	@echo "$(BLUE)Checking system readiness...$(NC)"
-	@health/build/healthcheck -mode cli -check readiness
+	@services/health/build/healthcheck -mode cli -check readiness
 
 ## health-liveness: Check if system is alive
 health-liveness: build-health
 	@echo "$(BLUE)Checking system liveness...$(NC)"
-	@health/build/healthcheck -mode cli -check liveness
+	@services/health/build/healthcheck -mode cli -check liveness
 
 ## health-server: Run health check server
 health-server: build-health
 	@echo "$(BLUE)Starting health check server on port 8080...$(NC)"
-	@health/build/healthcheck -mode server -port 8080
+	@services/health/build/healthcheck -mode server -port 8080
 
 ## health-analyzed: Run health check with LLM analysis
 health-analyzed: build-health
 	@echo "$(BLUE)Running health check with AI-powered analysis...$(NC)"
-	@health/build/healthcheck -mode cli -check analyzed
+	@services/health/build/healthcheck -mode cli -check analyzed
 
 ## prometheus-ui: Open Prometheus UI in browser
 prometheus-ui:
@@ -461,7 +461,7 @@ clean-go:
 	@echo "$(BLUE)Cleaning Go build artifacts...$(NC)"
 	@cd $(GO_PROXY_DIR) && make clean
 	@cd $(GO_DASHBOARD_DIR) && make clean
-	@cd health && make clean
+	@cd services/health && make clean
 	@echo "$(GREEN)✅ Go cleanup complete$(NC)"
 
 ## clean-all: Clean everything including venv
@@ -541,8 +541,8 @@ dashboard: venv
 start-dashboard:
 	@if ! pgrep -f "dashboard" > /dev/null && ! lsof -ti:3001 > /dev/null 2>&1; then \
 		echo "$(BLUE)Building and starting Go dashboard...$(NC)"; \
-		cd dashboard && make build && ./build/dashboard > ../dashboard.log 2>&1 & \
-		cd ..; \
+		cd services/dashboard && make build && ./build/dashboard > ../../dashboard.log 2>&1 & \
+		cd ../..; \
 		sleep 2; \
 		echo "$(GREEN)✅ Dashboard started at http://localhost:3001$(NC)"; \
 	else \
@@ -559,7 +559,7 @@ stop-dashboard:
 ## install-dashboard: Install dashboard dependencies
 install-dashboard: venv
 	@echo "$(BLUE)Installing dashboard dependencies...$(NC)"
-	@$(PIP) install -r requirements_dashboard.txt
+	@$(PIP) install -r python/requirements_app.txt
 	@echo "$(GREEN)✅ Dashboard dependencies installed$(NC)"
 
 ## load-test: Interactive high-performance load testing scenarios

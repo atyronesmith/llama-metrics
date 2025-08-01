@@ -19,6 +19,73 @@ This project provides a complete monitoring stack for Ollama AI models, includin
    1000 Questions    AI Responses    Metrics Collection  Scraping   Visualization
 ```
 
+## ✨ Example Application Architecture
+
+The following diagrams illustrate how the core components of Llama Metrics—the proxy, monitoring server, and dashboard—work together to create a complete, observable AI application.
+
+### Component Interaction Flow
+
+This diagram shows how a user request travels through the system, from the dashboard to the Ollama backend and back.
+
+```mermaid
+graph TD
+    subgraph "User Interaction"
+        User([User])
+    end
+
+    subgraph "Application Services (Go)"
+        Dashboard[Web Dashboard]
+        Proxy[Monitoring Proxy]
+    end
+
+    subgraph "AI Backend"
+        Ollama[Ollama API]
+    end
+
+    User -- "1. Sends request" --> Dashboard
+    Dashboard -- "2. Forwards to Proxy" --> Proxy
+    Proxy -- "3. Manages queue & forwards to Ollama" --> Ollama
+    Ollama -- "4. Generates response" --> Proxy
+    Proxy -- "5. Returns response" --> Dashboard
+    Dashboard -- "6. Displays result" --> User
+
+    style User fill:#cde4ff
+    style Dashboard fill:#d1ecf1
+    style Proxy fill:#d1ecf1
+    style Ollama fill:#d4edda
+```
+
+### Monitoring Data Flow
+
+This diagram illustrates how monitoring data is generated, collected, and displayed.
+
+```mermaid
+graph TD
+    subgraph "Application Services (Go)"
+        Proxy[Monitoring Proxy]
+    end
+
+    subgraph "Monitoring Stack"
+        Prometheus[Prometheus]
+        Dashboard[Web Dashboard]
+    end
+
+    subgraph "User Interaction"
+        Operator([Operator/User])
+    end
+
+    Proxy -- "1. Exposes /metrics endpoint" --> Prometheus
+    Prometheus -- "2. Scrapes metrics periodically" --> Proxy
+    Dashboard -- "3. Queries metrics from Prometheus (PromQL)" --> Prometheus
+    Prometheus -- "4. Returns time-series data" --> Dashboard
+    Operator -- "5. Views real-time dashboard" --> Dashboard
+
+    style Proxy fill:#cde4ff
+    style Prometheus fill:#f8d7da
+    style Dashboard fill:#d1ecf1
+    style Operator fill:#cde4ff
+```
+
 ## 📊 Dashboard
 
 The real-time dashboard provides comprehensive monitoring of your Ollama LLM performance:
