@@ -11,15 +11,15 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY requirements_all.txt .
+COPY ../requirements_all.txt .
 RUN pip install --no-cache-dir -r requirements_all.txt
 
 # Copy application files
-COPY *.py ./
-COPY config.yml ./
-COPY VERSION ./
-COPY docs/ ./docs/
-COPY templates/ ./templates/
+COPY ../shared/*.py ./
+COPY ../../config/llama-metrics.yml ./config.yml
+COPY ../../VERSION ./
+COPY ../../docs/ ./docs/
+COPY ../../scripts/ ./scripts/
 
 # Create non-root user
 RUN useradd -m -u 1000 monitor && \
