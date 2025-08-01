@@ -51,6 +51,7 @@ Thumbs.db
 podman-*
 docker-*
 prometheus_data/
+prometheus-data/
 
 # IDE
 .vscode/
