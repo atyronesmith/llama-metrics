@@ -3,8 +3,15 @@
 
 # Server Configuration
 server:
-  # Ollama API endpoint
+  # Ollama API endpoint - supports local and remote servers
+  # Examples:
+  #   Local: "http://localhost:11434"
+  #   Remote: "http://192.168.1.100:11434"
+  #   Remote with custom port: "http://ollama-server.local:8080"
   ollama_url: "http://localhost:11434"
+  
+  # Example: Access granite3.3:8b model on remote server
+  # ollama_url: "http://192.168.10.83:11434"
   
   # Monitoring proxy settings
   proxy_port: 11435
@@ -27,11 +34,18 @@ models:
   # Default model for testing
   default_model: "phi3:mini"
   
-  # Available models for load testing
+  # Example: Use granite3.3:8b model on remote server
+  # default_model: "granite3.3:8b"
+  
+  # Available models for load testing (based on your installed models)
   available_models:
     - "phi3:mini"
-    - "llama2"
-    - "codellama"
+    - "llama2:latest"
+    - "llama3.2:3b-instruct-fp16"
+    - "llama3:latest"
+    - "llama3.2:latest"
+    # Example: Add granite model when using remote server
+    # - "granite3.3:8b"
 
 # Monitoring Configuration
 monitoring:

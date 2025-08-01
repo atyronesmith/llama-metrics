@@ -63,13 +63,13 @@ build-proxy:
 build-dashboard:
 	@echo "$(BLUE)Building dashboard...$(NC)"
 	@cd $(GO_DASHBOARD_DIR) && make build
-	@echo "$(GREEN)✅ Dashboard built: $(GO_DASHBOARD_DIR)/build/dashboard$(NC)"
+	@echo "$(GREEN)✅ Dashboard built: $(GO_DASHBOARD_DIR)/build/llama-dashboard$(NC)"
 
 ## build-health: Build the health checker
 build-health:
 	@echo "$(BLUE)Building health checker...$(NC)"
 	@cd services/health && make build
-	@echo "$(GREEN)✅ Health checker built: services/health/build/healthcheck$(NC)"
+	@echo "$(GREEN)✅ Health checker built: services/health/build/llama-health$(NC)"
 
 ## build-all: Build all components for all platforms
 build-all:
@@ -218,7 +218,7 @@ pull-model:
 	fi
 
 ## start: Start all monitoring services with dashboard
-start: start-ollama start-proxy start-prometheus start-dashboard
+start: start-ollama start-proxy start-prometheus start-dashboard start-health start-mac-metrics
 	@echo "$(GREEN)🚀 All services started successfully!$(NC)"
 	@echo ""
 	@echo "$(BLUE)📊 Dashboard:$(NC)        http://localhost:3001"
@@ -241,8 +241,7 @@ start-ollama:
 		echo "$(YELLOW)Ollama is already running$(NC)"; \
 		echo "$(YELLOW)Note: If experiencing issues, restart with: make stop-ollama && make start-ollama$(NC)"; \
 	fi
-	@echo "$(BLUE)Starting dedicated monitoring Ollama instance...$(NC)"
-	@bash scripts/start_monitoring_ollama.sh
+	@echo "$(BLUE)Ollama monitoring ready$(NC)"
 
 ## start-proxy: Start the monitoring proxy with optimized settings
 start-proxy:
@@ -279,7 +278,7 @@ start-prometheus:
 	fi
 
 ## stop: Stop all monitoring services
-stop: stop-proxy stop-monitoring-ollama stop-prometheus stop-dashboard
+stop: stop-proxy stop-monitoring-ollama stop-prometheus stop-dashboard stop-health stop-mac-metrics
 	@echo "$(GREEN)✅ All monitoring services stopped$(NC)"
 
 ## stop-proxy: Stop the monitoring proxy
@@ -341,11 +340,23 @@ status:
 	else \
 		echo "$(RED)❌ Dashboard: Not running$(NC)"; \
 	fi
+	@if pgrep -f "llama-health.*server" > /dev/null || lsof -ti:8080 > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Health Checker: Running$(NC)"; \
+		echo "    └─ Server: http://localhost:8080"; \
+	else \
+		echo "$(RED)❌ Health Checker: Not running$(NC)"; \
+	fi
+	@if pgrep -f "mac_metrics.py" > /dev/null || lsof -ti:8002 > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Mac Metrics: Running$(NC)"; \
+		echo "    └─ Server: http://localhost:8002"; \
+	else \
+		echo "$(RED)❌ Mac Metrics: Not running$(NC)"; \
+	fi
 
 ## logs: Tail all service logs
 logs:
 	@echo "$(BLUE)Tailing logs (Ctrl+C to stop)...$(NC)"
-	@tail -f proxy.log prometheus.log ollama.log dashboard.log 2>/dev/null || echo "$(YELLOW)No log files found$(NC)"
+	@tail -f proxy.log prometheus.log ollama.log dashboard.log health.log mac_metrics.log 2>/dev/null || echo "$(YELLOW)No log files found$(NC)"
 
 ## logs-proxy: Tail proxy logs
 logs-proxy:
@@ -381,32 +392,32 @@ metrics:
 ## health: Check health of all services
 health: build-health
 	@echo "$(BLUE)Checking comprehensive system health...$(NC)"
-	@services/health/build/healthcheck -mode cli -check comprehensive
+	@services/health/build/llama-health -config config/llama-metrics.yml -mode cli -check comprehensive
 
 ## health-simple: Quick health check
 health-simple: build-health
 	@echo "$(BLUE)Quick health check...$(NC)"
-	@services/health/build/healthcheck -mode cli -check simple
+	@services/health/build/llama-health -config config/llama-metrics.yml -mode cli -check simple
 
 ## health-readiness: Check if system is ready
 health-readiness: build-health
 	@echo "$(BLUE)Checking system readiness...$(NC)"
-	@services/health/build/healthcheck -mode cli -check readiness
+	@services/health/build/llama-health -config config/llama-metrics.yml -mode cli -check readiness
 
 ## health-liveness: Check if system is alive
 health-liveness: build-health
 	@echo "$(BLUE)Checking system liveness...$(NC)"
-	@services/health/build/healthcheck -mode cli -check liveness
+	@services/health/build/llama-health -config config/llama-metrics.yml -mode cli -check liveness
 
 ## health-server: Run health check server
 health-server: build-health
 	@echo "$(BLUE)Starting health check server on port 8080...$(NC)"
-	@services/health/build/healthcheck -mode server -port 8080
+	@services/health/build/llama-health -config config/llama-metrics.yml -mode server -port 8080
 
 ## health-analyzed: Run health check with LLM analysis
 health-analyzed: build-health
 	@echo "$(BLUE)Running health check with AI-powered analysis...$(NC)"
-	@services/health/build/healthcheck -mode cli -check analyzed
+	@services/health/build/llama-health -config config/llama-metrics.yml -mode cli -check analyzed
 
 ## prometheus-ui: Open Prometheus UI in browser
 prometheus-ui:
@@ -541,12 +552,34 @@ dashboard: venv
 start-dashboard:
 	@if ! pgrep -f "dashboard" > /dev/null && ! lsof -ti:3001 > /dev/null 2>&1; then \
 		echo "$(BLUE)Building and starting Go dashboard...$(NC)"; \
-		cd services/dashboard && make build && ./build/dashboard > ../../dashboard.log 2>&1 & \
+		cd services/dashboard && make build && ./build/llama-dashboard > ../../dashboard.log 2>&1 & \
 		cd ../..; \
 		sleep 2; \
 		echo "$(GREEN)✅ Dashboard started at http://localhost:3001$(NC)"; \
 	else \
 		echo "$(YELLOW)Dashboard is already running$(NC)"; \
+	fi
+
+## start-health: Start health checker server
+start-health: build-health
+	@if ! pgrep -f "llama-health.*server" > /dev/null && ! lsof -ti:8080 > /dev/null 2>&1; then \
+		echo "$(BLUE)Starting health checker server...$(NC)"; \
+		services/health/build/llama-health -config config/llama-metrics.yml -mode server -port 8080 > health.log 2>&1 & \
+		sleep 2; \
+		echo "$(GREEN)✅ Health checker server started on port 8080$(NC)"; \
+	else \
+		echo "$(YELLOW)Health checker server is already running$(NC)"; \
+	fi
+
+## start-mac-metrics: Start Mac system metrics server
+start-mac-metrics: venv
+	@if ! pgrep -f "mac_metrics.py" > /dev/null && ! lsof -ti:8002 > /dev/null 2>&1; then \
+		echo "$(BLUE)Starting Mac system metrics server...$(NC)"; \
+		$(PYTHON) scripts/monitoring/mac_metrics.py > mac_metrics.log 2>&1 & \
+		sleep 2; \
+		echo "$(GREEN)✅ Mac metrics server started on port 8002$(NC)"; \
+	else \
+		echo "$(YELLOW)Mac metrics server is already running$(NC)"; \
 	fi
 
 ## stop-dashboard: Stop dashboard
@@ -555,6 +588,20 @@ stop-dashboard:
 	@pkill -f "dashboard" 2>/dev/null || true
 	@lsof -ti:3001 | xargs kill -9 2>/dev/null || true
 	@echo "$(GREEN)✅ Dashboard stopped$(NC)"
+
+## stop-health: Stop health checker server
+stop-health:
+	@echo "$(BLUE)Stopping health checker server...$(NC)"
+	@pkill -f "llama-health.*server" 2>/dev/null || true
+	@lsof -ti:8080 | xargs kill -9 2>/dev/null || true
+	@echo "$(GREEN)✅ Health checker server stopped$(NC)"
+
+## stop-mac-metrics: Stop Mac system metrics server
+stop-mac-metrics:
+	@echo "$(BLUE)Stopping Mac metrics server...$(NC)"
+	@pkill -f "mac_metrics.py" 2>/dev/null || true
+	@lsof -ti:8002 | xargs kill -9 2>/dev/null || true
+	@echo "$(GREEN)✅ Mac metrics server stopped$(NC)"
 
 ## install-dashboard: Install dashboard dependencies
 install-dashboard: venv

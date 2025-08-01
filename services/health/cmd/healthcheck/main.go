@@ -289,6 +289,51 @@ func runServer(hc *checker.HealthChecker, port int) {
 		c.JSON(http.StatusOK, analyzed)
 	})
 
+	// Prometheus metrics endpoint
+	router.GET("/metrics", func(c *gin.Context) {
+		ctx := c.Request.Context()
+		health := hc.GetComprehensiveHealth(ctx)
+		
+		// Convert health data to simple Prometheus metrics
+		var metrics []string
+		
+		// Service health status (1=healthy, 0=unhealthy)
+		for _, service := range health.Services {
+			status := float64(0)
+			if service.Status.Status == "healthy" {
+				status = 1
+			}
+			critical := "false"
+			if service.Critical {
+				critical = "true"
+			}
+			metrics = append(metrics, fmt.Sprintf(`health_service_status{service="%s",critical="%s"} %g`, service.Name, critical, status))
+			
+			if service.Status.ResponseTimeMs != nil {
+				metrics = append(metrics, fmt.Sprintf(`health_service_response_time_ms{service="%s"} %g`, service.Name, *service.Status.ResponseTimeMs))
+			}
+		}
+		
+		// System metrics
+		metrics = append(metrics, fmt.Sprintf("health_system_cpu_percent %g", health.SystemMetrics.CPU.Percent))
+		metrics = append(metrics, fmt.Sprintf("health_system_memory_percent %g", health.SystemMetrics.Memory.Percent))
+		metrics = append(metrics, fmt.Sprintf("health_system_disk_percent %g", health.SystemMetrics.Disk.Percent))
+		
+		// Overall status
+		overallStatus := float64(0)
+		if health.Status == "healthy" {
+			overallStatus = 1
+		} else if health.Status == "degraded" {
+			overallStatus = 0.5
+		}
+		metrics = append(metrics, fmt.Sprintf("health_overall_status %g", overallStatus))
+		metrics = append(metrics, fmt.Sprintf("health_uptime_seconds %g", health.UptimeSeconds))
+		
+		response := strings.Join(metrics, "\n") + "\n"
+		c.Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+		c.String(http.StatusOK, response)
+	})
+
 	// Legacy endpoints for compatibility
 	router.GET("/api/health", func(c *gin.Context) {
 		ctx := c.Request.Context()

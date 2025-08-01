@@ -38,6 +38,34 @@ This is a comprehensive Ollama monitoring solution featuring:
 4. **Configuration**: Centralized YAML-based configuration management
 5. **Testing**: Comprehensive test framework with unit, integration, and e2e tests
 
+## Current Status (August 2025)
+
+### ✅ Fully Operational Stack
+All monitoring services are now running successfully with complete Prometheus integration:
+
+**Active Services:**
+- **Ollama**: LLM service running on port 11434
+- **Go Monitoring Proxy**: Request interception and metrics collection on port 11435 (metrics: 8001)
+- **Go Dashboard**: Real-time WebSocket dashboard on port 3001 with Prometheus button
+- **Go Health Checker**: AI-powered health analysis on port 8080 (server mode)
+- **Mac System Metrics**: macOS-specific metrics collection on port 8002
+- **Prometheus**: Containerized metrics storage and querying on port 9090
+
+**Recent Achievements:**
+- ✅ Fixed all Makefile targets after project refactor
+- ✅ Added missing Prometheus run script with macOS podman/docker support
+- ✅ Implemented proper Prometheus metrics endpoints for all services
+- ✅ Added health checker and Mac metrics server startup/stop automation
+- ✅ Enhanced dashboard with Prometheus UI access button
+- ✅ Resolved all Prometheus scraping errors (5/5 targets healthy)
+
+**Prometheus Metrics Coverage:**
+- **Proxy Service**: Request rates, latencies, token generation, system resources
+- **Health Checker**: Service status, response times, system health metrics
+- **Mac Metrics**: GPU utilization, CPU/GPU power, memory pressure, thermal state
+- **Dashboard**: Go runtime metrics (GC, memory, goroutines)
+- **Prometheus**: Self-monitoring metrics
+
 ## Essential Commands
 
 ### Quick Start
@@ -51,16 +79,23 @@ make traffic              # Generate test traffic
 # Build all Go services
 make build                # Build proxy and dashboard
 make build-all           # Build for multiple platforms
+make build-health        # Build health checker
 
 # Run individual services (development mode)
 make run-proxy           # Run proxy in foreground
 make run-dashboard       # Run dashboard in foreground
 
-# Service management
-make start               # Start all services (optimized settings)
+# Service management (starts all 6 services)
+make start               # Start all services: ollama, proxy, prometheus, dashboard, health, mac-metrics
 make stop                # Stop all services
 make restart             # Restart all services
-make status              # Check service status
+make status              # Check service status (shows all 6 services)
+
+# Individual service control
+make start-health        # Start health checker server (port 8080)
+make start-mac-metrics   # Start Mac system metrics server (port 8002)
+make stop-health         # Stop health checker
+make stop-mac-metrics    # Stop Mac metrics
 ```
 
 ### Testing Commands
@@ -87,10 +122,20 @@ make load-test-queue     # Queue stress testing
 
 ### Health and Monitoring
 ```bash
+# Health checks (requires health service running)
 make health              # Comprehensive health check with AI analysis
 make health-simple       # Quick health check
-make metrics             # Show current metrics
-make logs                # Tail all service logs
+make health-readiness    # Kubernetes-style readiness check
+make health-liveness     # Kubernetes-style liveness check
+make health-analyzed     # AI-powered health analysis with recommendations
+
+# Monitoring and metrics
+make metrics             # Show current metrics from proxy
+make logs                # Tail all service logs (includes health.log, mac_metrics.log)
+make logs-proxy          # Proxy-specific logs
+
+# Prometheus and visualization
+# Dashboard now includes Prometheus button for direct access to http://localhost:9090
 ```
 
 ## Go Development
@@ -147,22 +192,45 @@ python script.py
 - **Service configs**: `config/services/` (service-specific overrides)
 - **Prometheus config**: `config/prometheus/prometheus.yml`
 
-### Environment Variables
-Key environment variables for optimization:
+### Remote Ollama Server Support
+The application supports connecting to remote Ollama servers:
+
+**Configuration file**: Edit `config/llama-metrics.yml`:
+```yaml
+server:
+  ollama_url: "http://192.168.1.100:11434"  # Remote server
+models:
+  default_model: "llama3:latest"             # Available on remote server
+```
+
+**Environment variables**: For runtime configuration:
 ```bash
-OLLAMA_NUM_PARALLEL=2      # Prevent resource contention
-MAX_CONCURRENCY=4          # Proxy worker threads
-MAX_QUEUE_SIZE=100         # Request buffer size
+export OLLAMA_URL="http://ollama-server.local:11434"
+export DEFAULT_MODEL="llama3:latest"
+```
+
+### Environment Variables
+Key environment variables for configuration:
+```bash
+# Ollama Configuration
+OLLAMA_URL=http://192.168.1.100:11434  # Remote Ollama server
+DEFAULT_MODEL=llama3:latest            # Default model for traffic generation
+
+# Performance Optimization
+OLLAMA_NUM_PARALLEL=2                  # Prevent resource contention
+MAX_CONCURRENCY=4                      # Proxy worker threads
+MAX_QUEUE_SIZE=100                     # Request buffer size
 ```
 
 ## Port Configuration
 
 - **11434**: Ollama API (default)
 - **11435**: Go monitoring proxy
-- **8001**: Metrics endpoint
-- **3001**: Go dashboard
-- **9090**: Prometheus UI
-- **8080**: Health checker server
+- **8001**: Proxy metrics endpoint
+- **3001**: Go dashboard (now with Prometheus UI button)
+- **9090**: Prometheus UI (container)
+- **8080**: Health checker server (comprehensive health monitoring)
+- **8002**: Mac system metrics server (GPU, power, thermal)
 
 ## Testing Strategy
 
