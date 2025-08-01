@@ -92,6 +92,15 @@
                         <small class="text-white-50" id="proxy-response-time"></small>
                     </div>
                     <div class="vr mx-2"></div>
+                    <button class="btn btn-outline-light btn-sm me-3" 
+                            onclick="window.open('http://localhost:9090', '_blank')"
+                            data-bs-toggle="tooltip"
+                            data-bs-placement="bottom"
+                            title="Open Prometheus UI in new tab to view detailed metrics, queries, and alerting">
+                        <i class="bi bi-graph-up"></i>
+                        Prometheus
+                    </button>
+                    <div class="vr mx-2"></div>
                     <span id="connection-status"
                           data-bs-toggle="tooltip"
                           data-bs-placement="bottom"

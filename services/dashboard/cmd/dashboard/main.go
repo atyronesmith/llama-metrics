@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -64,6 +65,9 @@ func main() {
 	// Routes
 	router.GET("/", dashboardHandler.Index)
 	router.GET("/ws", wsHandler.HandleWebSocket)
+	
+	// Prometheus metrics endpoint
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// API endpoints
 	api := router.Group("/api")

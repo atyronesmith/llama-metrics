@@ -126,7 +126,55 @@ def collect_metrics_loop():
 
 @app.route('/metrics')
 def get_metrics():
-    """Return current metrics as JSON"""
+    """Return current metrics in Prometheus format"""
+    prometheus_output = []
+    
+    # Add help and type information for each metric
+    prometheus_output.extend([
+        "# HELP mac_gpu_utilization_percent GPU utilization percentage",
+        "# TYPE mac_gpu_utilization_percent gauge",
+        f"mac_gpu_utilization_percent {metrics['gpu_utilization']}",
+        "",
+        "# HELP mac_gpu_power_watts GPU power consumption in watts", 
+        "# TYPE mac_gpu_power_watts gauge",
+        f"mac_gpu_power_watts {metrics['gpu_power']}",
+        "",
+        "# HELP mac_cpu_power_watts CPU power consumption in watts",
+        "# TYPE mac_cpu_power_watts gauge", 
+        f"mac_cpu_power_watts {metrics['cpu_power']}",
+        "",
+        "# HELP mac_cpu_temperature_celsius CPU temperature in Celsius",
+        "# TYPE mac_cpu_temperature_celsius gauge",
+        f"mac_cpu_temperature_celsius {metrics['cpu_temperature']}",
+        "",
+        "# HELP mac_memory_pressure_percent Memory pressure percentage",
+        "# TYPE mac_memory_pressure_percent gauge",
+        f"mac_memory_pressure_percent {metrics['memory_pressure']}",
+        "",
+        "# HELP mac_thermal_pressure_info Thermal pressure state (0=nominal, 1=fair, 2=serious, 3=critical)",
+        "# TYPE mac_thermal_pressure_info gauge",
+    ])
+    
+    # Convert thermal pressure to numeric value
+    thermal_values = {"nominal": 0, "fair": 1, "serious": 2, "critical": 3}
+    thermal_numeric = thermal_values.get(metrics['thermal_pressure'], 0)
+    prometheus_output.append(f"mac_thermal_pressure_info {thermal_numeric}")
+    prometheus_output.append("")
+    
+    # Add timestamp as a metric
+    prometheus_output.extend([
+        "# HELP mac_metrics_last_updated_timestamp Unix timestamp of last metrics update", 
+        "# TYPE mac_metrics_last_updated_timestamp gauge",
+        f"mac_metrics_last_updated_timestamp {metrics['timestamp']}",
+        ""
+    ])
+    
+    response = "\n".join(prometheus_output)
+    return response, 200, {'Content-Type': 'text/plain; version=0.0.4; charset=utf-8'}
+
+@app.route('/metrics/json')  
+def get_metrics_json():
+    """Return current metrics as JSON (legacy endpoint)"""
     return jsonify(metrics)
 
 @app.route('/health')
