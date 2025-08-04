@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 This is a comprehensive Ollama monitoring solution featuring:
-- **Go services**: Proxy, Dashboard, and Health checker with shared libraries
+- **Go services**: Proxy, Dashboard, Health checker, and Mac metrics service with shared libraries
 - **Python traffic generators**: Load testing with 1000+ curated questions across 10 categories
 - **Prometheus integration**: Metrics collection and visualization
 - **Real-time dashboard**: WebSocket-based monitoring with AI-powered insights
@@ -14,7 +14,7 @@ This is a comprehensive Ollama monitoring solution featuring:
 
 ### Service Architecture
 - **Go workspace**: Multi-module workspace with shared packages (`services/go.work`)
-- **Services structure**: Proxy, Dashboard, Health checker, and Shared libraries
+- **Services structure**: Proxy, Dashboard, Health checker, Mac metrics service, and Shared libraries
 - **Python components**: Organized in `python/` directory with shared utilities and containerization
 - **Monitoring flow**: `[Traffic] → [Go Proxy :11435] → [Ollama :11434] → [Metrics :8001]`
 
@@ -23,6 +23,7 @@ This is a comprehensive Ollama monitoring solution featuring:
    - `proxy/`: Monitoring proxy with request queuing and metrics collection
    - `dashboard/`: Real-time web dashboard with WebSocket updates
    - `health/`: Health checker with AI-powered analysis
+   - `mac-metrics/`: Native Go Mac system metrics collector (replaces Python version)
    - `shared/`: Common configuration, models, and metrics packages
 
 2. **Python Components** (`python/`):
@@ -48,21 +49,25 @@ All monitoring services are now running successfully with complete Prometheus in
 - **Go Monitoring Proxy**: Request interception and metrics collection on port 11435 (metrics: 8001)
 - **Go Dashboard**: Real-time WebSocket dashboard on port 3001 with Prometheus button
 - **Go Health Checker**: AI-powered health analysis on port 8080 (server mode)
-- **Mac System Metrics**: macOS-specific metrics collection on port 8002
+- **Go Mac Metrics**: Native Go Mac system metrics collection on port 8002
 - **Prometheus**: Containerized metrics storage and querying on port 9090
 
 **Recent Achievements:**
-- ✅ Fixed all Makefile targets after project refactor
-- ✅ Added missing Prometheus run script with macOS podman/docker support
-- ✅ Implemented proper Prometheus metrics endpoints for all services
-- ✅ Added health checker and Mac metrics server startup/stop automation
-- ✅ Enhanced dashboard with Prometheus UI access button
-- ✅ Resolved all Prometheus scraping errors (5/5 targets healthy)
+- ✅ **Converted Python to Go**: Replaced Python mac_metrics.py with native Go service
+- ✅ **Enhanced Mac metrics collection**: Native Go powermetrics integration with proper error handling
+- ✅ **Eliminated dependency issues**: No more Python/sudo environment conflicts
+- ✅ **Fixed JSON parsing errors**: Clean proxy logs with proper Go service integration
+- ✅ **Improved dashboard layout**: Reorganized metrics sections for better visual grouping
+- ✅ **Enhanced UI organization**: Moved service status to navbar, grouped related metrics
+- ✅ **Resolved all Prometheus scraping errors**: 6/6 targets healthy including new Go service
+- ✅ **Fixed GPU metrics collection**: Replaced faulty JSON parsing with text parsing for powermetrics
+- ✅ **Integrated dashboard with Mac metrics**: Dashboard now displays real-time GPU utilization and power data
+- ✅ **Cleaned up deprecated Python code**: Removed unused monitoring scripts and shared utilities
 
 **Prometheus Metrics Coverage:**
 - **Proxy Service**: Request rates, latencies, token generation, system resources
 - **Health Checker**: Service status, response times, system health metrics
-- **Mac Metrics**: GPU utilization, CPU/GPU power, memory pressure, thermal state
+- **Go Mac Metrics**: Real-time GPU utilization, CPU/GPU power consumption, memory pressure, thermal state (native Go with text parsing)
 - **Dashboard**: Go runtime metrics (GC, memory, goroutines)
 - **Prometheus**: Self-monitoring metrics
 
@@ -80,20 +85,21 @@ make traffic              # Generate test traffic
 make build                # Build proxy and dashboard
 make build-all           # Build for multiple platforms
 make build-health        # Build health checker
+make build-mac-metrics   # Build Go Mac metrics service
 
 # Run individual services (development mode)
 make run-proxy           # Run proxy in foreground
 make run-dashboard       # Run dashboard in foreground
 
 # Service management (starts all 6 services)
-make start               # Start all services: ollama, proxy, prometheus, dashboard, health, mac-metrics
+make start               # Start all services: ollama, proxy, prometheus, dashboard, health, go-mac-metrics
 make stop                # Stop all services
 make restart             # Restart all services
 make status              # Check service status (shows all 6 services)
 
 # Individual service control
 make start-health        # Start health checker server (port 8080)
-make start-mac-metrics   # Start Mac system metrics server (port 8002)
+make start-mac-metrics   # Start Go Mac metrics server (port 8002)
 make stop-health         # Stop health checker
 make stop-mac-metrics    # Stop Mac metrics
 ```
@@ -107,6 +113,7 @@ cd test && make test-coverage  # Run with coverage reporting
 # Service-specific tests
 cd test && make test-proxy     # Test proxy service only
 cd test && make test-dashboard # Test dashboard service only
+cd services/mac-metrics && make test # Test Go Mac metrics service
 
 # Test specific functionality
 cd test && make test-specific TEST=TestName MODULE=proxy
@@ -146,16 +153,35 @@ make logs-proxy          # Proxy-specific logs
 - Each service has its own module with standardized Makefile
 - Shared packages for common functionality
 
+### Go Mac Metrics Service
+The native Go Mac metrics service (`services/mac-metrics/`) provides:
+- **macOS system metrics**: GPU utilization, CPU/GPU power, memory pressure, thermal state
+- **Prometheus integration**: Native metrics endpoint at `/metrics`
+- **JSON compatibility**: Legacy `/metrics/json` endpoint for existing integrations
+- **Health monitoring**: Service health endpoint at `/health`
+- **Graceful degradation**: Works without sudo (memory pressure only) or with sudo (full metrics)
+- **Platform detection**: macOS-only with proper build constraints (`//go:build darwin`)
+
+**Key features:**
+- No Python dependencies (replaces `scripts/monitoring/mac_metrics.py`)
+- **Text-based powermetrics parsing**: Fixed GPU metrics collection with regex-based parsing
+- **Real-time GPU monitoring**: Accurate GPU utilization and power consumption tracking
+- Better error handling for powermetrics failures
+- Native Prometheus metrics without conversion
+- Integrated health checks and service information
+
 ### Build Process
 ```bash
 # Individual services (from project root)
 cd services/proxy && make build
 cd services/dashboard && make build
 cd services/health && make build
+cd services/mac-metrics && make build
 
 # All services from root (recommended)
 make build              # Build proxy and dashboard
 make build-all          # Build for multiple platforms
+make build-mac-metrics  # Build Go Mac metrics service
 ```
 
 ### Service Dependencies
@@ -275,6 +301,11 @@ make test-ci            # CI-friendly test run
 3. Add module to `services/go.work`
 4. Use shared packages for common functionality
 5. Run `go work sync` from `services/` directory to update workspace
+
+Example: The `mac-metrics` service was created following this pattern:
+- Created `services/mac-metrics/` with standard Go project structure
+- Added build targets to main Makefile (`build-mac-metrics`, `start-mac-metrics`)
+- Integrated with Prometheus and existing monitoring infrastructure
 
 ### Adding New Metrics
 1. Define metrics in `services/shared/metrics/`

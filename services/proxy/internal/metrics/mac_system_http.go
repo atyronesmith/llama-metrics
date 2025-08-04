@@ -28,7 +28,7 @@ func (m *MacSystemCollector) fetchMacMetricsFromHelper() {
 		Timeout: 2 * time.Second,
 	}
 
-	resp, err := client.Get("http://localhost:8002/metrics")
+	resp, err := client.Get("http://localhost:8002/metrics/json")
 	if err != nil {
 		// Helper not running, this is OK
 		return

@@ -21,9 +21,16 @@ echo "================================"
 
 # Function to check if virtual environment exists
 check_venv() {
-    if [ ! -d "venv" ]; then
+    # Check if we're in the scripts directory and need to go up to project root
+    if [[ "$(basename "$PWD")" == "traffic" ]]; then
+        PROJECT_ROOT="$(cd ../.. && pwd)"
+    else
+        PROJECT_ROOT="$PWD"
+    fi
+    
+    if [ ! -d "$PROJECT_ROOT/venv" ]; then
         echo -e "${RED}❌ Virtual environment not found!${NC}"
-        echo "Please run: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt"
+        echo "Please run from project root: python3 -m venv venv && source venv/bin/activate && pip install -r python/requirements.txt"
         exit 1
     fi
 }
@@ -51,10 +58,9 @@ check_proxy() {
         echo "Would you like to start it? (y/n)"
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
-            echo "Starting monitoring proxy..."
-            ../venv/bin/python ../ollama_monitoring_proxy.py > ../proxy.log 2>&1 &
-            sleep 3
-            echo -e "${GREEN}✅ Monitoring proxy started${NC}"
+            echo "Starting Go monitoring proxy..."
+            echo "Please run 'make start-proxy' from the project root instead"
+            echo -e "${YELLOW}⚠️  Using direct Ollama connection (no monitoring)${NC}"
         else
             echo -e "${YELLOW}⚠️  Using direct Ollama connection (no monitoring)${NC}"
             DEFAULT_URL="http://localhost:11434"
@@ -158,7 +164,7 @@ fi
 # Build the command
 # Get the script directory and project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Use the venv Python from project root
 CMD="$PROJECT_DIR/venv/bin/python $SCRIPT_DIR/generator.py --model $DEFAULT_MODEL --url $DEFAULT_URL --delay $DEFAULT_DELAY"

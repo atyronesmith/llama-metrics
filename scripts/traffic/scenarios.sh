@@ -6,7 +6,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOAD_TESTER="$SCRIPT_DIR/high_performance_load_tester.py"
 PYTHON_CMD="$PROJECT_DIR/venv/bin/python"
 

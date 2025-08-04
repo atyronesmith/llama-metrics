@@ -63,6 +63,36 @@
             background-color: rgba(255, 255, 255, 0.4);
             height: 24px;
         }
+        .metrics-section {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .metrics-section h5 {
+            color: #495057;
+            font-weight: 600;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 5px;
+        }
+        .compact-status {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 4px 8px;
+            margin: 0 8px;
+        }
+        .compact-status .status-label {
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.8);
+            margin-bottom: 2px;
+        }
+        .compact-status .status-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -73,26 +103,39 @@
                 <i class="bi bi-cpu"></i> Ollama LLM Dashboard
             </a>
             <span class="navbar-text">
-                <div class="d-flex align-items-center">
-                    <div id="ollama-status" class="d-flex align-items-center me-3"
-                         data-bs-toggle="tooltip"
-                         data-bs-placement="bottom"
-                         title="Ollama LLM Service: Green=Model ready and responding, Yellow=Slow or degraded performance, Red=Service offline or unreachable">
-                        <i class="bi bi-server me-1"></i>
-                        <span class="badge bg-secondary me-2">Unknown</span>
-                        <small class="text-white-50" id="ollama-response-time"></small>
+                <div class="d-flex align-items-center w-100 justify-content-between">
+                    <div class="d-flex align-items-center">
+                        <!-- Compact Service Status -->
+                        <div class="compact-status" id="ollama-status"
+                             data-bs-toggle="tooltip"
+                             data-bs-placement="bottom"
+                             title="Ollama LLM Service: Green=Model ready and responding, Yellow=Slow or degraded performance, Red=Service offline or unreachable">
+                            <div class="status-label text-center">Ollama</div>
+                            <div class="status-content">
+                                <span class="badge bg-secondary me-1" style="font-size: 0.65rem;">Unknown</span>
+                                <small class="text-white-50" id="ollama-response-time" style="font-size: 0.6rem;"></small>
+                            </div>
+                        </div>
+                        
+                        <div class="compact-status" id="proxy-status"
+                             data-bs-toggle="tooltip"
+                             data-bs-placement="bottom"
+                             title="Monitoring Proxy: Green=Intercepting and forwarding requests, Yellow=Performance issues, Red=Proxy offline (metrics collection stopped)">
+                            <div class="status-label text-center">Proxy</div>
+                            <div class="status-content">
+                                <span class="badge bg-secondary me-1" style="font-size: 0.65rem;">Unknown</span>
+                                <small class="text-white-50" id="proxy-response-time" style="font-size: 0.6rem;"></small>
+                            </div>
+                        </div>
+                        
+                        <div class="compact-status">
+                            <div class="status-label text-center">Dashboard</div>
+                            <div class="status-content">
+                                <span class="badge bg-success" style="font-size: 0.65rem;">Online</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="vr mx-2"></div>
-                    <div id="proxy-status" class="d-flex align-items-center me-3"
-                         data-bs-toggle="tooltip"
-                         data-bs-placement="bottom"
-                         title="Monitoring Proxy: Green=Intercepting and forwarding requests, Yellow=Performance issues, Red=Proxy offline (metrics collection stopped)">
-                        <i class="bi bi-arrow-left-right me-1"></i>
-                        <span class="badge bg-secondary me-2">Unknown</span>
-                        <small class="text-white-50" id="proxy-response-time"></small>
-                    </div>
-                    <div class="vr mx-2"></div>
-                    <button class="btn btn-outline-light btn-sm me-3" 
+                    <button class="btn btn-outline-light btn-sm" 
                             onclick="window.open('http://localhost:9090', '_blank')"
                             data-bs-toggle="tooltip"
                             data-bs-placement="bottom"
@@ -100,14 +143,6 @@
                         <i class="bi bi-graph-up"></i>
                         Prometheus
                     </button>
-                    <div class="vr mx-2"></div>
-                    <span id="connection-status"
-                          data-bs-toggle="tooltip"
-                          data-bs-placement="bottom"
-                          title="WebSocket Connection: Green=Real-time updates active, Red=Connection lost (will auto-reconnect)">
-                        <span class="status-indicator status-healthy"></span>
-                        Connected
-                    </span>
                 </div>
             </span>
         </div>
@@ -142,196 +177,218 @@
             </div>
         </div>
 
-        <!-- Summary Metrics Row -->
+
+        <!-- LLM Performance Metrics Section -->
         <div class="row mb-4">
-            <div class="col-md-3 mb-3">
-                <div class="card metric-card card-primary h-100" title="Prometheus Query: rate(ollama_proxy_requests_total[2m]) or local request history calculation">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="request-rate">0.0</div>
-                        <div class="metric-label">
-                            <i class="bi bi-speedometer2"></i> Requests/sec
+            <div class="col-12">
+                <div class="metrics-section">
+                    <h5><i class="bi bi-cpu"></i> LLM Performance Metrics</h5>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card card-primary h-100" title="Prometheus Query: rate(ollama_proxy_requests_total[2m]) or local request history calculation">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="request-rate">0.0</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-speedometer2"></i> Requests/sec
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="card metric-card card-info h-100" title="Prometheus Query: sum(rate(ollama_proxy_request_duration_seconds_sum{endpoint=&quot;/api/generate&quot;}[5m])) / sum(rate(ollama_proxy_request_duration_seconds_count{endpoint=&quot;/api/generate&quot;}[5m]))">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="avg-latency">0.0</div>
-                        <div class="metric-label">
-                            <i class="bi bi-clock"></i> Avg Latency (s)
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card card-info h-100" title="Prometheus Query: sum(rate(ollama_proxy_request_duration_seconds_sum{endpoint=&quot;/api/generate&quot;}[5m])) / sum(rate(ollama_proxy_request_duration_seconds_count{endpoint=&quot;/api/generate&quot;}[5m]))">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="avg-latency">0.0</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-clock"></i> Avg Latency (s)
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="card metric-card card-success h-100" title="Prometheus Query: rate(ollama_proxy_requests_total{status=&quot;200&quot;}[5m]) / rate(ollama_proxy_requests_total[5m]) * 100">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="success-rate">100.0%</div>
-                        <div class="metric-label">
-                            <i class="bi bi-check-circle"></i> Success Rate
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card card-success h-100" title="Prometheus Query: rate(ollama_proxy_requests_total{status=&quot;200&quot;}[5m]) / rate(ollama_proxy_requests_total[5m]) * 100">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="success-rate">100.0%</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-check-circle"></i> Success Rate
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                <div class="card metric-card card-warning h-100" title="Prometheus Query: rate(ollama_proxy_generated_tokens_total[5m])">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="tokens-per-sec">0.0</div>
-                        <div class="metric-label">
-                            <i class="bi bi-textarea-t"></i> Tokens/sec
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card card-warning h-100" title="Prometheus Query: rate(ollama_proxy_generated_tokens_total[5m])">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="tokens-per-sec">0.0</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-textarea-t"></i> Tokens/sec
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- System Metrics Row -->
+        <!-- Queue Management Section -->
         <div class="row mb-4">
-            <div class="col-md-2 mb-3">
-                <div class="card metric-card card-danger h-100" title="Prometheus Query: ollama_proxy_gpu_active_residency_percent">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="gpu-util">0.0%</div>
-                        <div class="metric-label">
-                            <i class="bi bi-gpu-card"></i> GPU Usage
+            <div class="col-12">
+                <div class="metrics-section">
+                    <h5><i class="bi bi-hourglass-split"></i> Queue Management</h5>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card card-primary h-100" title="Prometheus Query: sum(ollama_proxy_active_requests)">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="active-requests">0</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-activity"></i> Active Req.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card card-warning h-100" title="Prometheus Query: ollama_proxy_queue_size">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="queue-size">0</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-hourglass-split"></i> Queue Size
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card card-info h-100" title="Prometheus Query: ollama_proxy_queue_processing_rate">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="queue-processing-rate">0.0</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-speedometer"></i> Queue Rate/sec
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card card-danger h-100" title="Prometheus Query: ollama_proxy_queue_peak_size">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="max-queue-size">0</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-graph-up-arrow"></i> Peak Queue
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-12 mt-3">
+                            <div class="card metric-card card-success h-100" title="Queue efficiency calculated as (processing rate / queue size) * 100">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="queue-efficiency">100%</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-check-circle"></i> Queue Efficiency
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Latency Performance Metrics within Queue Section -->
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="card h-100" title="Prometheus Query: histogram_quantile(0.5/0.75/0.95/0.99, rate(ollama_proxy_request_duration_seconds_bucket[5m]))">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-bar-chart"></i> Latency Percentiles</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row text-center">
+                                        <div class="col-3">
+                                            <div class="h5 mb-0" id="p50">0.0s</div>
+                                            <small class="text-muted">P50</small>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="h5 mb-0" id="p75">0.0s</div>
+                                            <small class="text-muted">P75</small>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="h5 mb-0" id="p95">0.0s</div>
+                                            <small class="text-muted">P95</small>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="h5 mb-0" id="p99">0.0s</div>
+                                            <small class="text-muted">P99</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100" title="Prometheus Query: histogram_quantile(0.5/0.75/0.95/0.99, rate(ollama_proxy_high_priority_request_duration_seconds_bucket[5m]))">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-lightning-fill text-warning"></i> High Priority Latency</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row text-center">
+                                        <div class="col-3">
+                                            <div class="h5 mb-0" id="hp_p50">0.0s</div>
+                                            <small class="text-muted">P50</small>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="h5 mb-0" id="hp_p75">0.0s</div>
+                                            <small class="text-muted">P75</small>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="h5 mb-0" id="hp_p95">0.0s</div>
+                                            <small class="text-muted">P95</small>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="h5 mb-0" id="hp_p99">0.0s</div>
+                                            <small class="text-muted">P99</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-2 mb-3">
-                <div class="card metric-card card-warning h-100" title="Prometheus Query: ollama_proxy_cpu_power_milliwatts / 1000 (converts milliwatts to watts)">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="power-usage">0.0W</div>
-                        <div class="metric-label">
-                            <i class="bi bi-lightning"></i> Power
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2 mb-3">
-                <div class="card metric-card card-info h-100" title="Prometheus Query: ollama_proxy_ollama_serve_memory_bytes / 1024 / 1024 (Ollama main serve process memory only, excludes runner processes)">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="memory-usage">0.0 MB</div>
-                        <div class="metric-label">
-                            <i class="bi bi-memory"></i> Memory
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2 mb-3">
-                <div class="card metric-card card-primary h-100" title="Prometheus Query: sum(ollama_proxy_active_requests)">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="active-requests">0</div>
-                        <div class="metric-label">
-                            <i class="bi bi-activity"></i> Active Req.
-                        </div>
-                    </div>
-                </div>
-            </div>
-
         </div>
 
-        <!-- Queue Metrics Row -->
+        <!-- Hardware Metrics Section -->
         <div class="row mb-4">
-            <div class="col-md-3 mb-3">
-                				<div class="card metric-card card-warning h-100" title="Prometheus Query: ollama_proxy_queue_size">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="queue-size">0</div>
-                        <div class="metric-label">
-                            <i class="bi bi-hourglass-split"></i> Queue Size
+            <div class="col-12">
+                <div class="metrics-section">
+                    <h5><i class="bi bi-cpu-fill"></i> Hardware Resources</h5>
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="card metric-card card-danger h-100" title="Prometheus Query: ollama_proxy_gpu_active_residency_percent">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="gpu-util">0.0%</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-gpu-card"></i> GPU Usage
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                				<div class="card metric-card card-info h-100" title="Prometheus Query: ollama_proxy_queue_processing_rate">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="queue-processing-rate">0.0</div>
-                        <div class="metric-label">
-                            <i class="bi bi-speedometer"></i> Queue Rate/sec
+                        <div class="col-md-4 mb-3">
+                            <div class="card metric-card card-warning h-100" title="Prometheus Query: ollama_proxy_cpu_power_milliwatts / 1000 (converts milliwatts to watts)">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="power-usage">0.0W</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-lightning"></i> Power
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                				<div class="card metric-card card-danger h-100" title="Prometheus Query: ollama_proxy_queue_peak_size">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="max-queue-size">0</div>
-                        <div class="metric-label">
-                            <i class="bi bi-graph-up-arrow"></i> Peak Queue
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 mb-3">
-                				<div class="card metric-card card-success h-100" title="Queue efficiency calculated as (processing rate / queue size) * 100">
-                    <div class="card-body text-center">
-                        <div class="metric-value" id="queue-efficiency">100%</div>
-                        <div class="metric-label">
-                            <i class="bi bi-check-circle"></i> Queue Efficiency
+                        <div class="col-md-4 mb-3">
+                            <div class="card metric-card card-info h-100" title="Prometheus Query: ollama_proxy_ollama_serve_memory_bytes / 1024 / 1024 (Ollama main serve process memory only, excludes runner processes)">
+                                <div class="card-body text-center">
+                                    <div class="metric-value" id="memory-usage">0.0 MB</div>
+                                    <div class="metric-label">
+                                        <i class="bi bi-memory"></i> Memory
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Latency and Performance Metrics -->
-        <div class="row mt-3">
-            <div class="col-md-4">
-                <div class="card h-100" title="Prometheus Query: histogram_quantile(0.5/0.75/0.95/0.99, rate(ollama_proxy_request_duration_seconds_bucket[5m]))">
-                    <div class="card-header">
-                        <h6 class="mb-0"><i class="bi bi-bar-chart"></i> Latency Percentiles</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-3">
-                                <div class="h5 mb-0" id="p50">0.0s</div>
-                                <small class="text-muted">P50</small>
-                            </div>
-                            <div class="col-3">
-                                <div class="h5 mb-0" id="p75">0.0s</div>
-                                <small class="text-muted">P75</small>
-                            </div>
-                            <div class="col-3">
-                                <div class="h5 mb-0" id="p95">0.0s</div>
-                                <small class="text-muted">P95</small>
-                            </div>
-                            <div class="col-3">
-                                <div class="h5 mb-0" id="p99">0.0s</div>
-                                <small class="text-muted">P99</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card h-100" title="Prometheus Query: histogram_quantile(0.5/0.75/0.95/0.99, rate(ollama_proxy_high_priority_request_duration_seconds_bucket[5m]))">
-                    <div class="card-header">
-                        <h6 class="mb-0"><i class="bi bi-lightning-fill text-warning"></i> High Priority Latency</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="row text-center">
-                            <div class="col-3">
-                                <div class="h5 mb-0" id="hp_p50">0.0s</div>
-                                <small class="text-muted">P50</small>
-                            </div>
-                            <div class="col-3">
-                                <div class="h5 mb-0" id="hp_p75">0.0s</div>
-                                <small class="text-muted">P75</small>
-                            </div>
-                            <div class="col-3">
-                                <div class="h5 mb-0" id="hp_p95">0.0s</div>
-                                <small class="text-muted">P95</small>
-                            </div>
-                            <div class="col-3">
-                                <div class="h5 mb-0" id="hp_p99">0.0s</div>
-                                <small class="text-muted">P99</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Charts Row -->
         <div class="row mb-4">
@@ -474,26 +531,11 @@
                     reconnectInterval = null;
                 }
 
-                const statusSpan = document.getElementById('connection-status');
-                statusSpan.innerHTML = '<span class="status-indicator status-healthy"></span>Connected';
-
-                // Update tooltip
-                const tooltip = bootstrap.Tooltip.getInstance(statusSpan);
-                if (tooltip) {
-                    tooltip.setContent({ '.tooltip-inner': 'WebSocket connected. Receiving real-time metric updates.' });
-                }
+                // WebSocket connected - dashboard already shows as Online
             };
 
             socket.onclose = function() {
                 console.log('Disconnected from dashboard');
-                const statusSpan = document.getElementById('connection-status');
-                statusSpan.innerHTML = '<span class="status-indicator status-danger"></span>Disconnected';
-
-                // Update tooltip
-                const tooltip = bootstrap.Tooltip.getInstance(statusSpan);
-                if (tooltip) {
-                    tooltip.setContent({ '.tooltip-inner': 'WebSocket disconnected. Attempting to reconnect...' });
-                }
 
                 // Reset Ollama status to Unknown
                 const ollamaDiv = document.getElementById('ollama-status');

@@ -47,7 +47,9 @@ class OllamaTrafficGenerator:
     def load_questions(self) -> None:
         """Load questions from all JSON files in the questions directory"""
         self.questions = []
-        questions_dir = "questions"
+        # Find questions directory relative to script location
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        questions_dir = os.path.join(script_dir, "../../test/fixtures/questions")
 
         if not os.path.exists(questions_dir):
             logger.error(f"Questions directory '{questions_dir}' not found.")
