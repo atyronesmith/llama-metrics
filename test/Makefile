@@ -13,6 +13,7 @@ SHARED_MODULE=../services/shared
 PROXY_MODULE=../services/proxy
 DASHBOARD_MODULE=../services/dashboard
 HEALTH_MODULE=../services/health
+MAC_METRICS_MODULE=../services/mac-metrics
 
 # Test directories
 UNIT_DIR=unit
@@ -42,8 +43,10 @@ test-unit: ## Run unit tests for all Go modules
 	cd $(DASHBOARD_MODULE) && go test -v -timeout $(TIMEOUT) ./...
 	@echo "Testing health module..."
 	cd $(HEALTH_MODULE) && go test -v -timeout $(TIMEOUT) ./...
+	@echo "Testing mac-metrics module..."
+	cd $(MAC_METRICS_MODULE) && go test -v -timeout $(TIMEOUT) ./...
 	@echo "Testing Python unit tests..."
-	python -m pytest $(UNIT_DIR)/ -v || echo "Python unit tests not found or failed"
+	../venv/bin/python -m pytest $(UNIT_DIR)/ -v || echo "Python unit tests not found or failed"
 
 test-integration: ## Run integration tests
 	@echo "Running integration tests..."
@@ -69,6 +72,9 @@ test-coverage: ## Run tests with coverage reporting
 	@echo "Health module coverage:"
 	cd $(HEALTH_MODULE) && go test -race -coverprofile=coverage.out -covermode=atomic ./...
 	cd $(HEALTH_MODULE) && go tool cover -html=coverage.out -o coverage.html
+	@echo "Mac-metrics module coverage:"
+	cd $(MAC_METRICS_MODULE) && go test -race -coverprofile=coverage.out -covermode=atomic ./...
+	cd $(MAC_METRICS_MODULE) && go tool cover -html=coverage.out -o coverage.html
 	@echo "Integration tests coverage:"
 	go test -race -coverprofile=$(COVERAGE_OUT) -covermode=atomic ./$(INTEGRATION_DIR)/...
 	go tool cover -html=$(COVERAGE_OUT) -o coverage.html
@@ -79,6 +85,7 @@ test-race: ## Run tests with race condition detection
 	cd $(PROXY_MODULE) && go test -race -count=$(RACE_COUNT) ./...
 	cd $(DASHBOARD_MODULE) && go test -race -count=$(RACE_COUNT) ./...
 	cd $(HEALTH_MODULE) && go test -race -count=$(RACE_COUNT) ./...
+	cd $(MAC_METRICS_MODULE) && go test -race -count=$(RACE_COUNT) ./...
 	go test -race -count=$(RACE_COUNT) ./$(INTEGRATION_DIR)/...
 
 test-bench: ## Run benchmark tests
@@ -87,6 +94,7 @@ test-bench: ## Run benchmark tests
 	cd $(PROXY_MODULE) && go test -bench=. -benchmem ./...
 	cd $(DASHBOARD_MODULE) && go test -bench=. -benchmem ./...
 	cd $(HEALTH_MODULE) && go test -bench=. -benchmem ./...
+	cd $(MAC_METRICS_MODULE) && go test -bench=. -benchmem ./...
 
 test-verbose: ## Run tests with verbose output
 	@echo "Running tests with verbose output..."
@@ -94,6 +102,7 @@ test-verbose: ## Run tests with verbose output
 	cd $(PROXY_MODULE) && go test -v -race ./...
 	cd $(DASHBOARD_MODULE) && go test -v -race ./...
 	cd $(HEALTH_MODULE) && go test -v -race ./...
+	cd $(MAC_METRICS_MODULE) && go test -v -race ./...
 	go test -v -race ./$(INTEGRATION_DIR)/...
 
 test-short: ## Run tests with short flag (skip long-running tests)
@@ -102,6 +111,7 @@ test-short: ## Run tests with short flag (skip long-running tests)
 	cd $(PROXY_MODULE) && go test -short ./...
 	cd $(DASHBOARD_MODULE) && go test -short ./...
 	cd $(HEALTH_MODULE) && go test -short ./...
+	cd $(MAC_METRICS_MODULE) && go test -short ./...
 	go test -short ./$(INTEGRATION_DIR)/...
 
 test-specific: ## Run specific test (usage: make test-specific TEST=TestName MODULE=proxy)
@@ -124,8 +134,9 @@ setup-test: ## Set up test environment
 	cd $(PROXY_MODULE) && go mod download
 	cd $(DASHBOARD_MODULE) && go mod download
 	cd $(HEALTH_MODULE) && go mod download
+	cd $(MAC_METRICS_MODULE) && go mod download
 	@echo "Installing pytest for Python tests..."
-	pip install pytest pytest-cov || echo "Failed to install pytest"
+	../venv/bin/pip install pytest pytest-cov || echo "Failed to install pytest"
 	@echo "Test environment setup complete"
 
 clean: ## Clean test artifacts
@@ -146,6 +157,7 @@ test-ci: ## Run tests suitable for CI environment
 	cd $(PROXY_MODULE) && go test -race -coverprofile=coverage.out ./...
 	cd $(DASHBOARD_MODULE) && go test -race -coverprofile=coverage.out ./...
 	cd $(HEALTH_MODULE) && go test -race -coverprofile=coverage.out ./...
+	cd $(MAC_METRICS_MODULE) && go test -race -coverprofile=coverage.out ./...
 	@echo "Integration tests (if services are available):"
 	go test -race -timeout 5m ./$(INTEGRATION_DIR)/... || echo "Integration tests skipped - services not available"
 
@@ -155,6 +167,7 @@ lint-tests: ## Lint test files
 	cd $(PROXY_MODULE) && golangci-lint run ./... || echo "golangci-lint not available"
 	cd $(DASHBOARD_MODULE) && golangci-lint run ./... || echo "golangci-lint not available"
 	cd $(HEALTH_MODULE) && golangci-lint run ./... || echo "golangci-lint not available"
+	cd $(MAC_METRICS_MODULE) && golangci-lint run ./... || echo "golangci-lint not available"
 	golangci-lint run ./... || echo "golangci-lint not available"
 
 test-health: ## Test that all test infrastructure is working
@@ -166,6 +179,7 @@ test-health: ## Test that all test infrastructure is working
 	ls -la $(PROXY_MODULE)/
 	ls -la $(DASHBOARD_MODULE)/
 	ls -la $(HEALTH_MODULE)/
+	ls -la $(MAC_METRICS_MODULE)/
 	@echo "Running simple test..."
 	cd $(SHARED_MODULE) && go test -v -run TestLoadEnvString ./config
 	@echo "Test infrastructure is healthy"
@@ -182,6 +196,9 @@ test-health-service: ## Run tests for health service only
 
 test-shared: ## Run tests for shared packages only
 	cd $(SHARED_MODULE) && go test -v ./...
+
+test-mac-metrics: ## Run tests for mac-metrics service only
+	cd $(MAC_METRICS_MODULE) && go test -v ./...
 
 # Test watching (requires external tools)
 test-watch: ## Watch files and run tests on changes (requires entr)
