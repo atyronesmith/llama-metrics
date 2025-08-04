@@ -93,19 +93,26 @@ func (c *Collector) GetSummaryMetrics() (map[string]interface{}, error) {
 	}
 	metrics["tokens_per_second"] = toMetricValue(tokenRate)
 
-	// GPU utilization
-	gpuUtil, err := c.queryScalar(ctx, `ollama_proxy_gpu_active_residency_percent`)
+	// GPU utilization from Mac metrics service
+	gpuUtil, err := c.queryScalar(ctx, `mac_gpu_utilization_percent`)
 	if err != nil {
 		log.Printf("Error querying GPU utilization: %v", err)
 	}
 	metrics["gpu_utilization"] = toMetricValue(gpuUtil)
 
-	// Power consumption (convert from milliwatts to watts)
-	powerMilliwatts, err := c.queryScalar(ctx, `ollama_proxy_cpu_power_milliwatts`)
+	// CPU Power consumption from Mac metrics service (already in watts)
+	cpuPower, err := c.queryScalar(ctx, `mac_cpu_power_watts`)
 	if err != nil {
-		log.Printf("Error querying power consumption: %v", err)
+		log.Printf("Error querying CPU power consumption: %v", err)
 	}
-	metrics["power_consumption"] = toMetricValue(powerMilliwatts / 1000.0)
+	metrics["power_consumption"] = toMetricValue(cpuPower)
+
+	// GPU Power consumption from Mac metrics service
+	gpuPower, err := c.queryScalar(ctx, `mac_gpu_power_watts`)
+	if err != nil {
+		log.Printf("Error querying GPU power consumption: %v", err)
+	}
+	metrics["gpu_power"] = toMetricValue(gpuPower)
 
 	// Memory usage - track just the main Ollama serve process, not all runners
 	memoryBytes, err := c.queryScalar(ctx, `ollama_proxy_ollama_serve_memory_bytes`)
@@ -229,16 +236,16 @@ func (c *Collector) GetTimeSeriesData(hours int) (map[string]interface{}, error)
 		data["memory_usage"] = memoryData
 	}
 
-	// GPU utilization
-	gpuData, err := c.queryRange(ctx, `ollama_proxy_gpu_active_residency_percent`, startTime, endTime)
+	// GPU utilization from Mac metrics service
+	gpuData, err := c.queryRange(ctx, `mac_gpu_utilization_percent`, startTime, endTime)
 	if err != nil {
 		log.Printf("Error querying GPU time series: %v", err)
 	} else {
 		data["gpu_utilization"] = gpuData
 	}
 
-	// Power consumption (convert from milliwatts to watts)
-	powerData, err := c.queryRange(ctx, `ollama_proxy_cpu_power_milliwatts / 1000`, startTime, endTime)
+	// Power consumption from Mac metrics service (already in watts)
+	powerData, err := c.queryRange(ctx, `mac_cpu_power_watts`, startTime, endTime)
 	if err != nil {
 		log.Printf("Error querying power time series: %v", err)
 	} else {

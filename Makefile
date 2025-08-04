@@ -71,6 +71,12 @@ build-health:
 	@cd services/health && make build
 	@echo "$(GREEN)✅ Health checker built: services/health/build/llama-health$(NC)"
 
+## build-mac-metrics: Build the Go Mac metrics service
+build-mac-metrics:
+	@echo "$(BLUE)Building Mac metrics service...$(NC)"
+	@cd services/mac-metrics && make build
+	@echo "$(GREEN)✅ Mac metrics service built: services/mac-metrics/build/mac-metrics$(NC)"
+
 ## build-all: Build all components for all platforms
 build-all:
 	@echo "$(BLUE)Building all components for multiple platforms...$(NC)"
@@ -256,16 +262,6 @@ start-proxy:
 		echo "$(YELLOW)Monitoring proxy is already running$(NC)"; \
 	fi
 
-## start-proxy-python: Start the Python monitoring proxy (legacy)
-start-proxy-python: venv
-	@if ! pgrep -f "ollama_monitoring_proxy_fixed.py" > /dev/null; then \
-		echo "$(BLUE)Starting Python monitoring proxy...$(NC)"; \
-		$(PYTHON) ollama_monitoring_proxy_fixed.py > proxy.log 2>&1 & \
-		sleep 2; \
-		echo "$(GREEN)✅ Python monitoring proxy started$(NC)"; \
-	else \
-		echo "$(YELLOW)Monitoring proxy is already running$(NC)"; \
-	fi
 
 
 ## start-prometheus: Start Prometheus
@@ -334,7 +330,7 @@ status:
 	else \
 		echo "$(RED)❌ Prometheus: Not running$(NC)"; \
 	fi
-	@if pgrep -f "dashboard" > /dev/null && ! pgrep -f "dashboard.py" > /dev/null || lsof -ti:3001 > /dev/null 2>&1; then \
+	@if pgrep -f "dashboard" > /dev/null || lsof -ti:3001 > /dev/null 2>&1; then \
 		echo "$(GREEN)✅ Dashboard (Go): Running$(NC)"; \
 		echo "    └─ URL: http://localhost:3001"; \
 	else \
@@ -346,7 +342,7 @@ status:
 	else \
 		echo "$(RED)❌ Health Checker: Not running$(NC)"; \
 	fi
-	@if pgrep -f "mac_metrics.py" > /dev/null || lsof -ti:8002 > /dev/null 2>&1; then \
+	@if pgrep -f "mac-metrics" > /dev/null || lsof -ti:8002 > /dev/null 2>&1; then \
 		echo "$(GREEN)✅ Mac Metrics: Running$(NC)"; \
 		echo "    └─ Server: http://localhost:8002"; \
 	else \
@@ -425,9 +421,9 @@ prometheus-ui:
 	@open http://localhost:9090 || xdg-open http://localhost:9090 || echo "$(YELLOW)Please open http://localhost:9090 in your browser$(NC)"
 
 ## test: Run monitoring tests
-test: venv
+test:
 	@echo "$(BLUE)Running monitoring tests...$(NC)"
-	@$(PYTHON) test_ollama_monitoring.py
+	@cd test && make test
 
 ## lint: Run shellcheck on all shell scripts
 lint:
@@ -510,7 +506,7 @@ demo: setup start
 
 ## docker-prometheus: Run Prometheus in Docker/Podman
 docker-prometheus:
-	@./run_prometheus.sh
+	@./scripts/run_prometheus.sh
 
 ## all: Complete setup, start services, and run demo
 all: setup start demo
@@ -518,9 +514,9 @@ all: setup start demo
 # Advanced targets for development
 
 ## debug-proxy: Run proxy in foreground for debugging
-debug-proxy: venv
+debug-proxy:
 	@echo "$(BLUE)Running proxy in debug mode...$(NC)"
-	@$(PYTHON) ollama_monitoring_proxy_fixed.py
+	@cd services/proxy && make dev
 
 ## watch-metrics: Continuously watch metrics
 watch-metrics:
@@ -544,9 +540,9 @@ install-tools:
 	fi
 
 ## dashboard: Start the web dashboard
-dashboard: venv
+dashboard:
 	@echo "$(BLUE)Starting Ollama Dashboard...$(NC)"
-	@$(PYTHON) dashboard.py
+	@cd services/dashboard && make run
 
 ## start-dashboard: Start dashboard in background
 start-dashboard:
@@ -571,13 +567,13 @@ start-health: build-health
 		echo "$(YELLOW)Health checker server is already running$(NC)"; \
 	fi
 
-## start-mac-metrics: Start Mac system metrics server
-start-mac-metrics: venv
-	@if ! pgrep -f "mac_metrics.py" > /dev/null && ! lsof -ti:8002 > /dev/null 2>&1; then \
-		echo "$(BLUE)Starting Mac system metrics server...$(NC)"; \
-		$(PYTHON) scripts/monitoring/mac_metrics.py > mac_metrics.log 2>&1 & \
+## start-mac-metrics: Start Go Mac system metrics server
+start-mac-metrics: build-mac-metrics
+	@if ! pgrep -f "mac-metrics" > /dev/null && ! lsof -ti:8002 > /dev/null 2>&1; then \
+		echo "$(BLUE)Starting Go Mac system metrics server...$(NC)"; \
+		services/mac-metrics/build/mac-metrics > mac_metrics.log 2>&1 & \
 		sleep 2; \
-		echo "$(GREEN)✅ Mac metrics server started on port 8002$(NC)"; \
+		echo "$(GREEN)✅ Go Mac metrics server started on port 8002$(NC)"; \
 	else \
 		echo "$(YELLOW)Mac metrics server is already running$(NC)"; \
 	fi
@@ -596,10 +592,10 @@ stop-health:
 	@lsof -ti:8080 | xargs kill -9 2>/dev/null || true
 	@echo "$(GREEN)✅ Health checker server stopped$(NC)"
 
-## stop-mac-metrics: Stop Mac system metrics server
+## stop-mac-metrics: Stop Go Mac system metrics server
 stop-mac-metrics:
 	@echo "$(BLUE)Stopping Mac metrics server...$(NC)"
-	@pkill -f "mac_metrics.py" 2>/dev/null || true
+	@pkill -f "mac-metrics" 2>/dev/null || true
 	@lsof -ti:8002 | xargs kill -9 2>/dev/null || true
 	@echo "$(GREEN)✅ Mac metrics server stopped$(NC)"
 
@@ -612,12 +608,12 @@ install-dashboard: venv
 ## load-test: Interactive high-performance load testing scenarios
 load-test: venv
 	@echo "$(BLUE)Starting High-Performance Load Testing...$(NC)"
-	@./scripts/load_test_scenarios.sh
+	@$(PYTHON) scripts/traffic/high_performance.py
 
 ## load-test-quick: Quick safe load test (2 minutes)
 load-test-quick: venv
 	@echo "$(BLUE)Running Quick Load Test...$(NC)"
-	@$(PYTHON) scripts/high_performance_load_tester.py \
+	@$(PYTHON) scripts/traffic/high_performance.py \
 		--pattern constant \
 		--rps 3.0 \
 		--concurrent 5 \
@@ -628,7 +624,7 @@ load-test-quick: venv
 load-test-queue: venv
 	@echo "$(BLUE)Running Queue Stress Test...$(NC)"
 	@echo "$(YELLOW)Watch queue metrics at http://localhost:3001$(NC)"
-	@$(PYTHON) scripts/high_performance_load_tester.py \
+	@$(PYTHON) scripts/traffic/high_performance.py \
 		--pattern constant \
 		--rps 25.0 \
 		--concurrent 5 \
@@ -638,7 +634,7 @@ load-test-queue: venv
 ## load-test-burst: Burst load test with periodic spikes
 load-test-burst: venv
 	@echo "$(BLUE)Running Burst Load Test...$(NC)"
-	@$(PYTHON) scripts/high_performance_load_tester.py \
+	@$(PYTHON) scripts/traffic/high_performance.py \
 		--pattern burst \
 		--rps 20.0 \
 		--concurrent 5 \
@@ -650,7 +646,7 @@ load-test-burst: venv
 ## load-test-chaos: Chaotic random load pattern
 load-test-chaos: venv
 	@echo "$(BLUE)Running Chaos Load Test...$(NC)"
-	@$(PYTHON) scripts/high_performance_load_tester.py \
+	@$(PYTHON) scripts/traffic/high_performance.py \
 		--pattern chaos \
 		--rps 20.0 \
 		--concurrent 5 \
