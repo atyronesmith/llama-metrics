@@ -366,3 +366,11 @@ make logs-proxy          # Proxy-specific logs
 - **Not versioned**: Prometheus data files are in `.gitignore` and should never be committed
 - **Structure**: Directory structure should exist but data files (`prometheus-data/wal/*`, `prometheus-data/queries.active`) are generated at runtime
 - **Cleanup**: Use `make clean` to remove logs and temporary files (data directory preserved)
+```
+
+## Memories
+- Learn how to build and run llama-health by reviewing the existing Makefile commands and project structure
+  - Use `make build` to compile services
+  - Use `make start` to launch all services
+  - Use `make traffic` to generate test traffic
+  - Refer to specific service build and run commands like `make build-mac-metrics` and `make start-mac-metrics`

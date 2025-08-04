@@ -5,7 +5,9 @@ package collector
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/http"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -19,6 +21,13 @@ import (
 
 // PowermeticsData is no longer used - we parse text output directly
 
+// ServiceUptime tracks uptime for a service
+type ServiceUptime struct {
+	StartTime time.Time `json:"start_time"`
+	Uptime    string    `json:"uptime"`
+	Status    string    `json:"status"`
+}
+
 // MacMetrics holds all the Mac system metrics
 type MacMetrics struct {
 	GPUUtilization  float64 `json:"gpu_utilization"`
@@ -28,6 +37,10 @@ type MacMetrics struct {
 	MemoryPressure  float64 `json:"memory_pressure"`
 	ThermalPressure string  `json:"thermal_pressure"`
 	Timestamp       float64 `json:"timestamp"`
+
+	// Service uptime tracking
+	OllamaUptime ServiceUptime `json:"ollama_uptime"`
+	ProxyUptime  ServiceUptime `json:"proxy_uptime"`
 }
 
 // Collector manages the collection of Mac system metrics
@@ -47,6 +60,10 @@ type Collector struct {
 	collectInterval time.Duration
 	ctx             context.Context
 	cancel          context.CancelFunc
+
+	// Service uptime tracking
+	ollamaStartTime time.Time
+	proxyStartTime  time.Time
 }
 
 // NewCollector creates a new metrics collector
@@ -143,6 +160,9 @@ func (c *Collector) collectMetrics() {
 
 	// Collect memory pressure
 	c.collectMemoryPressure()
+
+	// Collect service uptime
+	c.collectServiceUptime()
 
 	// Update Prometheus metrics
 	c.updatePrometheusMetrics()
@@ -368,6 +388,76 @@ func (c *Collector) parseThermalPressure(output string) string {
 	return ""
 }
 
+// collectServiceUptime collects uptime information for Ollama and proxy services
+func (c *Collector) collectServiceUptime() {
+	// Check Ollama service
+	ollamaUptime := c.checkServiceUptime("http://localhost:11434/api/tags", &c.ollamaStartTime)
+	c.metrics.OllamaUptime = ollamaUptime
+
+	// Check proxy service  
+	proxyUptime := c.checkServiceUptime("http://localhost:8001/health", &c.proxyStartTime)
+	c.metrics.ProxyUptime = proxyUptime
+}
+
+// checkServiceUptime checks if a service is running and calculates uptime
+func (c *Collector) checkServiceUptime(url string, startTime *time.Time) ServiceUptime {
+	client := &http.Client{Timeout: 2 * time.Second}
+	
+	resp, err := client.Get(url)
+	if err != nil {
+		// Service is down, reset start time
+		*startTime = time.Time{}
+		return ServiceUptime{
+			Status: "down",
+			Uptime: "0s",
+		}
+	}
+	defer resp.Body.Close()
+
+	now := time.Now()
+	
+	// If service is up and we don't have a start time, set it now
+	if startTime.IsZero() {
+		*startTime = now
+		return ServiceUptime{
+			StartTime: *startTime,
+			Status:    "up",
+			Uptime:    "just started",
+		}
+	}
+
+	// Calculate uptime
+	uptime := now.Sub(*startTime)
+	uptimeStr := c.formatUptime(uptime)
+
+	return ServiceUptime{
+		StartTime: *startTime,
+		Status:    "up", 
+		Uptime:    uptimeStr,
+	}
+}
+
+// formatUptime formats a duration into a human-readable uptime string
+func (c *Collector) formatUptime(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.0fs", d.Seconds())
+	}
+	if d < time.Hour {
+		minutes := int(d.Minutes())
+		seconds := int(d.Seconds()) - minutes*60
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	if d < 24*time.Hour {
+		hours := int(d.Hours())
+		minutes := int(d.Minutes()) - hours*60
+		return fmt.Sprintf("%dh %dm", hours, minutes)
+	}
+	
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) - days*24
+	return fmt.Sprintf("%dd %dh", days, hours)
+}
+
 // HealthCheck returns the health status of the collector
 func (c *Collector) HealthCheck() map[string]interface{} {
 	c.mu.RLock()
@@ -378,6 +468,10 @@ func (c *Collector) HealthCheck() map[string]interface{} {
 		"last_collection":     time.Unix(int64(c.metrics.Timestamp), 0).Format(time.RFC3339),
 		"metrics_available":   true,
 		"powermetrics_access": c.metrics.GPUPower > 0 || c.metrics.CPUPower > 0,
+		"service_uptime": map[string]interface{}{
+			"ollama": c.metrics.OllamaUptime,
+			"proxy":  c.metrics.ProxyUptime,
+		},
 	}
 
 	// Check if we're getting any meaningful data

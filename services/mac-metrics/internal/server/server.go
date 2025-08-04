@@ -38,6 +38,9 @@ func (s *Server) Start() error {
 	// JSON metrics endpoint (for legacy compatibility)
 	router.HandleFunc("/metrics/json", s.jsonMetricsHandler).Methods("GET")
 
+	// Service uptime endpoint
+	router.HandleFunc("/uptime", s.uptimeHandler).Methods("GET")
+
 	// Prometheus metrics endpoint
 	router.Handle("/metrics", promhttp.Handler()).Methods("GET")
 
@@ -57,6 +60,7 @@ func (s *Server) Start() error {
 	log.Printf("  - http://localhost:%d/health", s.port)
 	log.Printf("  - http://localhost:%d/metrics", s.port)
 	log.Printf("  - http://localhost:%d/metrics/json", s.port)
+	log.Printf("  - http://localhost:%d/uptime", s.port)
 
 	return s.server.ListenAndServe()
 }
@@ -89,6 +93,19 @@ func (s *Server) jsonMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(metrics)
 }
 
+// uptimeHandler handles service uptime requests
+func (s *Server) uptimeHandler(w http.ResponseWriter, r *http.Request) {
+	metrics := s.collector.GetMetrics()
+	uptime := map[string]interface{}{
+		"ollama": metrics.OllamaUptime,
+		"proxy":  metrics.ProxyUptime,
+		"timestamp": metrics.Timestamp,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(uptime)
+}
+
 // rootHandler provides service information
 func (s *Server) rootHandler(w http.ResponseWriter, r *http.Request) {
 	info := map[string]interface{}{
@@ -97,8 +114,9 @@ func (s *Server) rootHandler(w http.ResponseWriter, r *http.Request) {
 		"description": "Go-based Mac system metrics collector with powermetrics support",
 		"endpoints": map[string]string{
 			"/health":       "Health check and status information",
-			"/metrics":      "Prometheus metrics endpoint",
+			"/metrics":      "Prometheus metrics endpoint", 
 			"/metrics/json": "JSON metrics endpoint (legacy compatibility)",
+			"/uptime":       "Service uptime information for Ollama and proxy",
 		},
 		"capabilities": map[string]interface{}{
 			"gpu_utilization":  "GPU usage percentage",

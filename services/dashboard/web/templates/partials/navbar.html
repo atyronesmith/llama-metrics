@@ -1,0 +1,51 @@
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="#">
+            <i class="bi bi-cpu"></i> Ollama LLM Dashboard
+        </a>
+        <span class="navbar-text">
+            <div class="d-flex align-items-center w-100 justify-content-between">
+                <div class="d-flex align-items-center">
+                    <!-- Compact Service Status -->
+                    <div class="compact-status" id="ollama-status"
+                         data-bs-toggle="tooltip"
+                         data-bs-placement="bottom"
+                         title="Ollama LLM Service: Green=Model ready and responding, Yellow=Slow or degraded performance, Red=Service offline or unreachable">
+                        <div class="status-label text-center">Ollama</div>
+                        <div class="status-content">
+                            <span class="badge bg-secondary me-1" style="font-size: 0.65rem;">Unknown</span>
+                            <small class="text-white-50" id="ollama-response-time" style="font-size: 0.6rem;"></small>
+                        </div>
+                    </div>
+                    
+                    <div class="compact-status" id="proxy-status"
+                         data-bs-toggle="tooltip"
+                         data-bs-placement="bottom"
+                         title="Monitoring Proxy: Green=Intercepting and forwarding requests, Yellow=Performance issues, Red=Proxy offline (metrics collection stopped)">
+                        <div class="status-label text-center">Proxy</div>
+                        <div class="status-content">
+                            <span class="badge bg-secondary me-1" style="font-size: 0.65rem;">Unknown</span>
+                            <small class="text-white-50" id="proxy-response-time" style="font-size: 0.6rem;"></small>
+                        </div>
+                    </div>
+                    
+                    <div class="compact-status">
+                        <div class="status-label text-center">Dashboard</div>
+                        <div class="status-content">
+                            <span class="badge bg-success" style="font-size: 0.65rem;">Online</span>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-light btn-sm" 
+                        onclick="window.open('http://localhost:9090', '_blank')"
+                        data-bs-toggle="tooltip"
+                        data-bs-placement="bottom"
+                        title="Open Prometheus UI in new tab to view detailed metrics, queries, and alerting">
+                    <i class="bi bi-graph-up"></i>
+                    Prometheus
+                </button>
+            </div>
+        </span>
+    </div>
+</nav>

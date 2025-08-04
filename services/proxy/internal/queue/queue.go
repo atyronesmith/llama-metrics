@@ -133,6 +133,7 @@ func (qm *Manager) Submit(ctx context.Context, model string, priority int, handl
 
 	heap.Push(&qm.pq, req)
 	qm.updateQueueStatsLocked(true, priority)
+	qm.metrics.RecordQueueItemAdded(priority)
 	qm.pqMutex.Unlock()
 
 	// Signal workers
@@ -198,6 +199,11 @@ func (qm *Manager) processRequest(req *Request) {
 	// Execute the handler
 	err := req.Handler()
 	req.result <- err
+
+	// Record success metrics if no error
+	if err == nil {
+		qm.metrics.RecordQueueSuccess(req.Priority)
+	}
 
 	// Update processed stats
 	qm.updateProcessedStats()

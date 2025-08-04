@@ -43,6 +43,14 @@ type Collector struct {
 	QueueNormalPriorityCount  prometheus.Gauge
 	QueueHighPriorityWaitTime prometheus.Histogram
 	QueueNormalPriorityWaitTime prometheus.Histogram
+	
+	// Queue item counters (total items added)
+	QueueHighPriorityItemsTotal  prometheus.Counter
+	QueueNormalPriorityItemsTotal prometheus.Counter
+	
+	// Queue success counters
+	QueueHighPrioritySuccessTotal prometheus.Counter
+	QueueNormalPrioritySuccessTotal prometheus.Counter
 
 	// Context length
 	ContextLength *prometheus.HistogramVec
@@ -240,6 +248,34 @@ func NewCollector() *Collector {
 				Name:    "ollama_proxy_queue_normal_priority_wait_time_seconds",
 				Help:    "Time spent waiting in normal priority queue before processing",
 				Buckets: []float64{0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0},
+			},
+		),
+
+		QueueHighPriorityItemsTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "ollama_proxy_queue_high_priority_items_total",
+				Help: "Total number of items added to high priority queue",
+			},
+		),
+
+		QueueNormalPriorityItemsTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "ollama_proxy_queue_normal_priority_items_total",
+				Help: "Total number of items added to normal priority queue",
+			},
+		),
+
+		QueueHighPrioritySuccessTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "ollama_proxy_queue_high_priority_success_total",
+				Help: "Total number of successful high priority requests",
+			},
+		),
+
+		QueueNormalPrioritySuccessTotal: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Name: "ollama_proxy_queue_normal_priority_success_total",
+				Help: "Total number of successful normal priority requests",
 			},
 		),
 
@@ -456,6 +492,24 @@ func (c *Collector) RecordQueueWaitTime(model string, duration time.Duration) {
 // RecordQueueProcessingRate records the queue processing rate
 func (c *Collector) RecordQueueProcessingRate(rate float64) {
 	c.QueueProcessingRate.Set(rate)
+}
+
+// RecordQueueItemAdded records when an item is added to a priority queue
+func (c *Collector) RecordQueueItemAdded(priority int) {
+	if priority == 1 { // High priority
+		c.QueueHighPriorityItemsTotal.Inc()
+	} else { // Normal priority
+		c.QueueNormalPriorityItemsTotal.Inc()
+	}
+}
+
+// RecordQueueSuccess records a successful request completion by priority
+func (c *Collector) RecordQueueSuccess(priority int) {
+	if priority == 1 { // High priority
+		c.QueueHighPrioritySuccessTotal.Inc()
+	} else { // Normal priority
+		c.QueueNormalPrioritySuccessTotal.Inc()
+	}
 }
 
 // getTokenCost returns the cost per token in cents for a given model

@@ -33,11 +33,33 @@ type Collector struct {
 	requestInProgress   bool
 	consecutiveTimeouts int
 	statusMutex         sync.RWMutex
+	
+	// Smart caching for AI status
+	lastMetricsSnapshot map[string]interface{}
+	lastCacheTime       time.Time
+	cacheThresholds     map[string]float64
+	
+	// Context memory for enhanced summarization
+	contextHistory      []ContextEntry
+	conversationContext []ChatMessage
 }
 
 type requestDataPoint struct {
 	timestamp    time.Time
 	totalRequests float64
+}
+
+// ContextEntry represents a previous summarization with timestamp
+type ContextEntry struct {
+	Timestamp time.Time `json:"timestamp"`
+	Metrics   string    `json:"metrics"`
+	Summary   string    `json:"summary"`
+}
+
+// ChatMessage represents a message in the conversation context
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
 // NewCollector creates a new metrics collector
@@ -47,6 +69,18 @@ func NewCollector(promAPI v1.API, ollamaURL string) *Collector {
 		ollamaURL:  ollamaURL,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		lastStatus: "System operational",
+		lastMetricsSnapshot: make(map[string]interface{}),
+		cacheThresholds: map[string]float64{
+			"request_rate":       0.5,  // Request rate change of 0.5 req/s
+			"avg_latency":        0.5,  // Latency change of 0.5 seconds
+			"tokens_per_second":  5.0,  // Token rate change of 5 tokens/s
+			"gpu_utilization":    10.0, // GPU usage change of 10%
+			"power_consumption":  5.0,  // Power change of 5W
+			"memory_usage":       100.0, // Memory change of 100MB
+			"success_rate":       5.0,  // Success rate change of 5%
+			"active_requests":    3.0,  // Active requests change of 3
+			"queue_size":         2.0,  // Queue size change of 2
+		},
 	}
 }
 
@@ -145,11 +179,36 @@ func (c *Collector) GetSummaryMetrics() (map[string]interface{}, error) {
 		metrics["max_queue_size"] = int(maxQueueSize)
 	}
 
+	// Priority queue item counters
+	highPriorityItemsTotal, err := c.queryScalar(ctx, `ollama_proxy_queue_high_priority_items_total`)
+	if err == nil {
+		metrics["high_priority_items_total"] = int(highPriorityItemsTotal)
+	}
+
+	normalPriorityItemsTotal, err := c.queryScalar(ctx, `ollama_proxy_queue_normal_priority_items_total`)
+	if err == nil {
+		metrics["normal_priority_items_total"] = int(normalPriorityItemsTotal)
+	}
+
+	// Priority queue success counters
+	highPrioritySuccessTotal, err := c.queryScalar(ctx, `ollama_proxy_queue_high_priority_success_total`)
+	if err == nil {
+		metrics["high_priority_success_total"] = int(highPrioritySuccessTotal)
+	}
+
+	normalPrioritySuccessTotal, err := c.queryScalar(ctx, `ollama_proxy_queue_normal_priority_success_total`)
+	if err == nil {
+		metrics["normal_priority_success_total"] = int(normalPrioritySuccessTotal)
+	}
+
+	// Get uptime data from mac-metrics service
+	uptimeData := c.getUptimeData()
+
 	// Check Ollama health
-	metrics["ollama_status"] = c.checkOllamaHealth()
+	metrics["ollama_status"] = c.checkOllamaHealth(uptimeData)
 
 	// Check Proxy health
-	metrics["proxy_status"] = c.checkProxyHealth()
+	metrics["proxy_status"] = c.checkProxyHealth(uptimeData)
 
 	// Direct requests count
 	totalRequests, err := c.queryScalar(ctx, `ollama_proxy_requests_total`)
@@ -266,21 +325,84 @@ func (c *Collector) GetTimeSeriesData(hours int) (map[string]interface{}, error)
 	return data, nil
 }
 
+// hasSignificantChange checks if any metric has changed significantly since last cache
+func (c *Collector) hasSignificantChange(currentMetrics map[string]interface{}) bool {
+	if len(c.lastMetricsSnapshot) == 0 {
+		return true // First time - always generate
+	}
+	
+	for key, threshold := range c.cacheThresholds {
+		currentVal := getFloat(currentMetrics, key)
+		lastVal := getFloat(c.lastMetricsSnapshot, key)
+		
+		// Special handling for active_requests and queue_size (treat as integers)
+		if key == "active_requests" || key == "queue_size" {
+			currentInt := getInt(currentMetrics, key)
+			lastInt := getInt(c.lastMetricsSnapshot, key)
+			if math.Abs(float64(currentInt-lastInt)) >= threshold {
+				log.Printf("Significant change detected in %s: %d -> %d (threshold: %.1f)", 
+					key, lastInt, currentInt, threshold)
+				return true
+			}
+		} else {
+			// Handle float metrics
+			if math.Abs(currentVal-lastVal) >= threshold {
+				log.Printf("Significant change detected in %s: %.2f -> %.2f (threshold: %.1f)", 
+					key, lastVal, currentVal, threshold)
+				return true
+			}
+		}
+	}
+	
+	return false
+}
+
+// shouldUpdateCache determines if AI status should be updated based on time and changes
+func (c *Collector) shouldUpdateCache(currentMetrics map[string]interface{}) bool {
+	now := time.Now()
+	
+	// Always update if more than 1 minute has passed
+	if now.Sub(c.lastCacheTime) >= 60*time.Second {
+		log.Printf("Cache expired: %v since last update", now.Sub(c.lastCacheTime))
+		return true
+	}
+	
+	// Update if significant changes detected
+	if c.hasSignificantChange(currentMetrics) {
+		return true
+	}
+	
+	return false
+}
+
+// updateMetricsSnapshot stores current metrics for future comparison
+func (c *Collector) updateMetricsSnapshot(metrics map[string]interface{}) {
+	// Create a copy of key metrics for comparison
+	c.lastMetricsSnapshot = make(map[string]interface{})
+	for key := range c.cacheThresholds {
+		if val, exists := metrics[key]; exists {
+			c.lastMetricsSnapshot[key] = val
+		}
+	}
+	c.lastCacheTime = time.Now()
+}
+
 // GenerateAIStatus generates a human-readable status using the LLM
 func (c *Collector) GenerateAIStatus(summary map[string]interface{}, percentiles map[string]interface{}) (string, bool) {
 	c.statusMutex.Lock()
 	defer c.statusMutex.Unlock()
 
-	// Check if we should skip generation
+	// Check if we should skip generation due to high load
 	activeRequests := getInt(summary, "active_requests")
 	queueSize := getInt(summary, "queue_size")
 
 	if activeRequests > 5 || queueSize > 10 {
-		// System under load
+		// System under load - use quick fallback and update snapshot
 		tokensPerSec := getFloat(summary, "tokens_per_second")
 		avgLatency := getFloat(summary, "avg_latency")
 		status := fmt.Sprintf("High load: %d active requests, %d queued. %.1f tokens/s, %.2fs avg latency",
 			activeRequests, queueSize, tokensPerSec, avgLatency)
+		c.updateMetricsSnapshot(summary)
 		return status, false
 	}
 
@@ -289,28 +411,31 @@ func (c *Collector) GenerateAIStatus(summary map[string]interface{}, percentiles
 		return c.lastStatus, true
 	}
 
-	// Only generate every 15 seconds
-	if time.Since(c.lastGenerationTime) < 15*time.Second {
+	// Smart caching: only generate if significant changes or cache expired
+	if !c.shouldUpdateCache(summary) {
 		return c.lastStatus, true
 	}
 
-	// If too many timeouts, wait longer
-	if c.consecutiveTimeouts >= 3 && time.Since(c.lastGenerationTime) < 60*time.Second {
-		return fmt.Sprintf("⚠️ LLM temporarily unavailable - %s", c.lastStatus), false
+	// If consecutive failures, skip next attempts and use fallback
+	if c.consecutiveTimeouts >= 2 {
+		waitTime := time.Duration(c.consecutiveTimeouts*30) * time.Second // Progressive backoff
+		if time.Since(c.lastGenerationTime) < waitTime {
+			return c.generateFallbackStatus(summary), false
+		}
 	}
 
 	// Mark as in progress
 	c.requestInProgress = true
 	c.lastGenerationTime = time.Now()
 
-	// Prepare context
-	context := c.prepareMetricsContext(summary)
+	// Prepare metrics summary
+	metricsContext := c.prepareMetricsContext(summary)
+	
+	// Create metrics summary for context
+	currentMetrics := c.createMetricsSummary(metricsContext)
 
-	// Create prompt
-	prompt := c.createStatusPrompt(context)
-
-	// Query LLM
-	response, err := c.queryLLM(prompt)
+	// Query LLM with conversation context
+	response, err := c.queryLLMWithContext(currentMetrics)
 	c.requestInProgress = false
 
 	if err != nil {
@@ -322,6 +447,13 @@ func (c *Collector) GenerateAIStatus(summary map[string]interface{}, percentiles
 	if response != "" {
 		c.lastStatus = response
 		c.consecutiveTimeouts = 0
+		
+		// Store context for future summarizations
+		c.storeContext(currentMetrics, response)
+		
+		// Update metrics snapshot since we successfully generated new status
+		c.updateMetricsSnapshot(summary)
+		
 		return response, true
 	}
 
@@ -457,11 +589,44 @@ func (c *Collector) queryRange(ctx context.Context, query string, start, end tim
 	return data, nil
 }
 
-func (c *Collector) checkOllamaHealth() map[string]interface{} {
+// getUptimeData fetches uptime data from the mac-metrics service
+func (c *Collector) getUptimeData() map[string]interface{} {
+	resp, err := c.httpClient.Get("http://localhost:8002/uptime")
+	if err != nil {
+		log.Printf("Error fetching uptime data: %v", err)
+		return make(map[string]interface{})
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		log.Printf("Uptime service returned status %d", resp.StatusCode)
+		return make(map[string]interface{})
+	}
+
+	var uptimeData map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&uptimeData); err != nil {
+		log.Printf("Error parsing uptime data: %v", err)
+		return make(map[string]interface{})
+	}
+
+	return uptimeData
+}
+
+func (c *Collector) checkOllamaHealth(uptimeData map[string]interface{}) map[string]interface{} {
 	status := map[string]interface{}{
 		"status":        "unknown",
 		"response_time": nil,
 		"last_check":    time.Now().Unix(),
+		"uptime":        nil,
+	}
+
+	// Add uptime data from mac-metrics service
+	if ollamaUptime, ok := uptimeData["ollama"]; ok {
+		if uptimeMap, ok := ollamaUptime.(map[string]interface{}); ok {
+			if uptime, ok := uptimeMap["uptime"].(string); ok {
+				status["uptime"] = uptime
+			}
+		}
 	}
 
 	start := time.Now()
@@ -492,11 +657,21 @@ func (c *Collector) checkOllamaHealth() map[string]interface{} {
 	return status
 }
 
-func (c *Collector) checkProxyHealth() map[string]interface{} {
+func (c *Collector) checkProxyHealth(uptimeData map[string]interface{}) map[string]interface{} {
 	status := map[string]interface{}{
 		"status":        "unknown",
 		"response_time": nil,
 		"last_check":    time.Now().Unix(),
+		"uptime":        nil,
+	}
+
+	// Add uptime data from mac-metrics service
+	if proxyUptime, ok := uptimeData["proxy"]; ok {
+		if uptimeMap, ok := proxyUptime.(map[string]interface{}); ok {
+			if uptime, ok := uptimeMap["uptime"].(string); ok {
+				status["uptime"] = uptime
+			}
+		}
 	}
 
 	// Proxy health endpoint is on metrics port 8001
@@ -572,36 +747,92 @@ func (c *Collector) prepareMetricsContext(summary map[string]interface{}) map[st
 		context["gpu_status"] = "minimal GPU usage"
 	}
 
-	// Other metrics
+	// Other metrics with timestamp
+	now := time.Now()
+	context["timestamp"] = fmt.Sprintf("%d", now.Unix()) // Unix timestamp
+	context["human_time"] = now.Format("01-02-06 3:04pm") // Short format MM-DD-YY like "08-04-25 9:46pm"
 	context["power_status"] = fmt.Sprintf("%.1fW power consumption", getFloat(summary, "power_consumption"))
 	context["memory_status"] = fmt.Sprintf("%.0fMB memory used", getFloat(summary, "memory_usage"))
 	context["success_status"] = fmt.Sprintf("%.1f%% success rate", getFloat(summary, "success_rate"))
 	context["token_generation"] = fmt.Sprintf("%.1f tokens/second", getFloat(summary, "tokens_per_second"))
 	context["active_requests"] = fmt.Sprintf("%d", getInt(summary, "active_requests"))
+	
+	// Queue priority metrics
+	highPriorityTotal := getInt(summary, "high_priority_items_total")
+	normalPriorityTotal := getInt(summary, "normal_priority_items_total")
+	highPrioritySuccess := getInt(summary, "high_priority_success_total")
+	normalPrioritySuccess := getInt(summary, "normal_priority_success_total")
+	
+	if highPriorityTotal > 0 || normalPriorityTotal > 0 {
+		context["queue_priority_status"] = fmt.Sprintf("HP: %d/%d success, NP: %d/%d success", 
+			highPrioritySuccess, highPriorityTotal, normalPrioritySuccess, normalPriorityTotal)
+	} else {
+		context["queue_priority_status"] = "no queue activity"
+	}
 
 	return context
 }
 
 func (c *Collector) createStatusPrompt(context map[string]string) string {
-	return fmt.Sprintf(`Generate a brief status summary for an AI server monitoring dashboard. Use the metrics below to create one paragraph (2-3 sentences).
-
-Current metrics:
-- Request Activity: %s
-- Latency: %s
-- GPU: %s
-- Power: %s
-- Memory: %s
-- Reliability: %s
-- Token Generation: %s
-
-Write a status summary:`,
-		context["request_activity"],
+	return fmt.Sprintf(`System status: %s requests, %s, GPU %s. Status:`,
+		context["active_requests"],
 		context["latency_status"],
+		context["gpu_status"])
+}
+
+// createMetricsSummary creates a concise metrics summary for context
+func (c *Collector) createMetricsSummary(context map[string]string) string {
+	return fmt.Sprintf("Time: %s - Active: %s requests, %s, GPU: %s, %s, Memory: %s, Tokens: %s, Queue: %s",
+		context["human_time"],
+		context["active_requests"],
+		context["latency_status"], 
 		context["gpu_status"],
 		context["power_status"],
 		context["memory_status"],
-		context["success_status"],
-		context["token_generation"])
+		context["token_generation"],
+		context["queue_priority_status"])
+}
+
+// storeContext stores the current metrics and response in context history
+func (c *Collector) storeContext(metrics string, response string) {
+	entry := ContextEntry{
+		Timestamp: time.Now(),
+		Metrics:   metrics,
+		Summary:   response,
+	}
+	
+	// Add to context history
+	c.contextHistory = append(c.contextHistory, entry)
+	
+	// Keep only last 2 entries
+	if len(c.contextHistory) > 2 {
+		c.contextHistory = c.contextHistory[len(c.contextHistory)-2:]
+	}
+	
+	// Update conversation context
+	c.updateConversationContext(metrics, response)
+}
+
+// updateConversationContext maintains the chat conversation context
+func (c *Collector) updateConversationContext(metrics string, response string) {
+	// Add user message (current metrics)
+	userMessage := ChatMessage{
+		Role:    "user",
+		Content: fmt.Sprintf("New metrics: %s. Update system status summary. Use the provided unix timestamp, not placeholder text.", metrics),
+	}
+	
+	// Add assistant response
+	assistantMessage := ChatMessage{
+		Role:    "assistant", 
+		Content: response,
+	}
+	
+	c.conversationContext = append(c.conversationContext, userMessage, assistantMessage)
+	
+	// Keep only last 6 messages (3 exchanges)
+	if len(c.conversationContext) > 6 {
+		c.conversationContext = c.conversationContext[len(c.conversationContext)-6:]
+	}
 }
 
 func (c *Collector) queryLLM(prompt string) (string, error) {
@@ -616,10 +847,10 @@ func (c *Collector) queryLLM(prompt string) (string, error) {
 		return "", err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.ollamaURL+"/api/generate", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11435/api/generate", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", err
 	}
@@ -675,12 +906,135 @@ func (c *Collector) queryLLM(prompt string) (string, error) {
 	return response, nil
 }
 
+// queryLLMWithContext queries the LLM using chat API with conversation context
+func (c *Collector) queryLLMWithContext(currentMetrics string) (string, error) {
+	// Build conversation messages
+	messages := make([]ChatMessage, 0)
+	
+	// Add existing conversation context
+	messages = append(messages, c.conversationContext...)
+	
+	// Add current metrics as new user message
+	if len(c.conversationContext) == 0 {
+		// First time - add system message
+		systemMessage := ChatMessage{
+			Role:    "system",
+			Content: "You are a system monitoring assistant. Provide concise, technical status updates based on metrics. Keep responses under 100 words and focus on key insights and trends. Start your response with 'System Status Summary (' followed by the time from the metrics in format like '08-04-25 9:46pm', then '):'. Don't show long timestamp numbers, don't say 'Timestamp:'.",
+		}
+		messages = append(messages, systemMessage)
+	}
+	
+	userMessage := ChatMessage{
+		Role:    "user",
+		Content: fmt.Sprintf("New metrics: %s. Update system status summary. Use the provided unix timestamp, not placeholder text.", currentMetrics),
+	}
+	messages = append(messages, userMessage)
+	
+	// Create chat payload
+	payload := map[string]interface{}{
+		"model":    "phi3:mini",
+		"messages": messages,
+		"stream":   false,
+		"options": map[string]interface{}{
+			"temperature": 0.3,
+			"num_predict": 150,
+		},
+	}
+	
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	// Use chat API endpoint instead of generate
+	req, err := http.NewRequestWithContext(ctx, "POST", "http://localhost:11435/api/chat", bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", err
+	}
+	
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Priority", "high")  // AI summaries get high priority
+	
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("LLM returned status %d", resp.StatusCode)
+	}
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", err
+	}
+	
+	// Extract response from chat API format
+	var response string
+	if message, ok := result["message"].(map[string]interface{}); ok {
+		if content, ok := message["content"].(string); ok {
+			response = content
+		}
+	}
+	
+	if response == "" {
+		return "", fmt.Errorf("invalid response format")
+	}
+	
+	// Validate response
+	response = strings.TrimSpace(response)
+	if response == "" {
+		return "", fmt.Errorf("empty response")
+	}
+	
+	// Check for error indicators
+	errorIndicators := []string{"sorry", "I need", "dictionary", "python", "document", "instruction"}
+	lowerResponse := strings.ToLower(response)
+	for _, indicator := range errorIndicators {
+		if strings.Contains(lowerResponse, indicator) {
+			return "", fmt.Errorf("invalid LLM response")
+		}
+	}
+	
+	// Limit length
+	if len(response) > 500 {
+		response = response[:497] + "..."
+	}
+	
+	return response, nil
+}
+
 func (c *Collector) generateFallbackStatus(summary map[string]interface{}) string {
-	return fmt.Sprintf("System operational: %d active requests, %.1f tokens/s, %.2fs latency, GPU %.0f%%",
+	// Get service uptimes for more informative status
+	ollamaUptime := ""
+	if status, ok := summary["ollama_status"].(map[string]interface{}); ok {
+		if uptime, ok := status["uptime"].(string); ok {
+			ollamaUptime = fmt.Sprintf(", Ollama: %s", uptime)
+		}
+	}
+	
+	proxyUptime := ""
+	if status, ok := summary["proxy_status"].(map[string]interface{}); ok {
+		if uptime, ok := status["uptime"].(string); ok {
+			proxyUptime = fmt.Sprintf(", Proxy: %s", uptime)
+		}
+	}
+
+	return fmt.Sprintf("System operational - %d active requests, %.1f tokens/s, GPU %.0f%%%s%s",
 		getInt(summary, "active_requests"),
 		getFloat(summary, "tokens_per_second"),
-		getFloat(summary, "avg_latency"),
-		getFloat(summary, "gpu_utilization"))
+		getFloat(summary, "gpu_utilization"),
+		ollamaUptime,
+		proxyUptime)
 }
 
 // Utility functions
