@@ -1,0 +1,97 @@
+<!-- Charts Row -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card" title="Prometheus Query: rate(ollama_proxy_generated_tokens_total[1m])">
+            <div class="card-header d-flex justify-content-between">
+                <h6 class="mb-0"><i class="bi bi-graph-up"></i> Token Generation Rate</h6>
+                <small class="text-muted">Last Hour</small>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="tokensChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card" title="Prometheus Query: ollama_proxy_memory_usage_bytes / 1024 / 1024">
+            <div class="card-header d-flex justify-content-between">
+                <h6 class="mb-0"><i class="bi bi-memory"></i> Memory Usage</h6>
+                <small class="text-muted">Last Hour</small>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="memoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card" title="Prometheus Query: ollama_proxy_gpu_active_residency_percent">
+            <div class="card-header d-flex justify-content-between">
+                <h6 class="mb-0"><i class="bi bi-gpu-card"></i> GPU Utilization</h6>
+                <small class="text-muted">Last Hour</small>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="gpuChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card" title="Prometheus Query: ollama_proxy_cpu_power_milliwatts / 1000">
+            <div class="card-header d-flex justify-content-between">
+                <h6 class="mb-0"><i class="bi bi-lightning"></i> Power Consumption</h6>
+                <small class="text-muted">Last Hour</small>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Queue Visualization Charts -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-3">
+        <div class="card" title="Prometheus Query: ollama_proxy_queue_size over time">
+            <div class="card-header d-flex justify-content-between">
+                <h6 class="mb-0"><i class="bi bi-hourglass-split"></i> Request Queue Size</h6>
+                <small class="text-muted">Last Hour</small>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="queueSizeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 mb-3">
+        <div class="card" title="Prometheus Query: ollama_proxy_queue_processing_rate over time">
+            <div class="card-header d-flex justify-content-between">
+                <h6 class="mb-0"><i class="bi bi-speedometer"></i> Queue Processing Rate</h6>
+                <small class="text-muted">Last Hour</small>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="queueRateChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Footer -->
+<div class="row">
+    <div class="col-12 text-center">
+        <small class="last-updated">
+            Last updated: <span id="last-updated">--</span>
+        </small>
+    </div>
+</div>

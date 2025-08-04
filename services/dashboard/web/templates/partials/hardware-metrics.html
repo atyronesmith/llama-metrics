@@ -1,0 +1,40 @@
+<!-- Hardware Metrics Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="metrics-section">
+            <h5><i class="bi bi-cpu-fill"></i> Hardware Resources</h5>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <div class="card metric-card card-danger h-100" title="Prometheus Query: ollama_proxy_gpu_active_residency_percent">
+                        <div class="card-body text-center">
+                            <div class="metric-value" id="gpu-util">0.0%</div>
+                            <div class="metric-label">
+                                <i class="bi bi-gpu-card"></i> GPU Usage
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card metric-card card-warning h-100" title="Prometheus Query: ollama_proxy_cpu_power_milliwatts / 1000 (converts milliwatts to watts)">
+                        <div class="card-body text-center">
+                            <div class="metric-value" id="power-usage">0.0W</div>
+                            <div class="metric-label">
+                                <i class="bi bi-lightning"></i> Power
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card metric-card card-info h-100" title="Prometheus Query: ollama_proxy_ollama_serve_memory_bytes / 1024 / 1024 (Ollama main serve process memory only, excludes runner processes)">
+                        <div class="card-body text-center">
+                            <div class="metric-value" id="memory-usage">0.0 MB</div>
+                            <div class="metric-label">
+                                <i class="bi bi-memory"></i> Memory
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

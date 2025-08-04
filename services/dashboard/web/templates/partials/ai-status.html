@@ -1,0 +1,27 @@
+<!-- AI Status Banner -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="alert alert-info mb-0" role="alert">
+            <div class="d-flex align-items-start">
+                <i class="bi bi-robot me-2 mt-1"></i>
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <div class="d-flex align-items-center">
+                            <strong class="me-2">System Status:</strong>
+                            <span id="status-mode" class="badge bg-secondary" style="font-size: 0.7rem;">--</span>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <small class="text-muted me-2" id="status-timestamp">
+                                Updated at --
+                            </small>
+                            <button class="btn btn-outline-primary btn-sm" id="refresh-status" title="Refresh Status">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="ai-status" class="mt-1" style="line-height: 1.4;">Initializing monitoring...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

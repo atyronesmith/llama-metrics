@@ -58,63 +58,34 @@ func (hc *HealthChecker) AnalyzeHealthWithLLM(ctx context.Context, health models
 func (hc *HealthChecker) buildAnalysisPrompt(health models.SystemHealth) string {
 	var sb strings.Builder
 
-	sb.WriteString("You are a system health analyzer. Analyze the following health check data and provide a concise summary with insights and recommendations.\n\n")
+	sb.WriteString("Analyze this system health data. Give 2-3 sentence summary.\n\n")
 
 	// Overall status
-	sb.WriteString(fmt.Sprintf("OVERALL STATUS: %s\n", strings.ToUpper(health.Status)))
-	sb.WriteString(fmt.Sprintf("Uptime: %.1f hours\n\n", health.UptimeSeconds/3600))
+	sb.WriteString(fmt.Sprintf("Status: %s\n", health.Status))
 
-	// Service status
-	sb.WriteString("SERVICE STATUS:\n")
+	// Service issues only
+	unhealthyServices := []string{}
 	for _, service := range health.Services {
-		status := "✅"
 		if service.Status.Status != "healthy" {
-			status = "❌"
+			if service.Status.Error != nil {
+				unhealthyServices = append(unhealthyServices, fmt.Sprintf("%s: %s", service.Name, *service.Status.Error))
+			} else {
+				unhealthyServices = append(unhealthyServices, service.Name)
+			}
 		}
-		sb.WriteString(fmt.Sprintf("%s %s: %s", status, service.Name, service.Status.Status))
-		if service.Status.Error != nil {
-			sb.WriteString(fmt.Sprintf(" (Error: %s)", *service.Status.Error))
-		}
-		if service.Status.ResponseTimeMs != nil {
-			sb.WriteString(fmt.Sprintf(" [%dms]", int(*service.Status.ResponseTimeMs)))
-		}
-		sb.WriteString("\n")
 	}
 
-	// System metrics
-	sb.WriteString(fmt.Sprintf("\nSYSTEM METRICS:\n"))
-	if len(health.SystemMetrics.CPU.LoadAvg) >= 3 {
-		sb.WriteString(fmt.Sprintf("- CPU: %.1f%% (Load: %.2f, %.2f, %.2f)\n",
-			health.SystemMetrics.CPU.Percent,
-			health.SystemMetrics.CPU.LoadAvg[0],
-			health.SystemMetrics.CPU.LoadAvg[1],
-			health.SystemMetrics.CPU.LoadAvg[2]))
-	} else {
-		sb.WriteString(fmt.Sprintf("- CPU: %.1f%%\n", health.SystemMetrics.CPU.Percent))
+	if len(unhealthyServices) > 0 {
+		sb.WriteString(fmt.Sprintf("Issues: %s\n", strings.Join(unhealthyServices, ", ")))
 	}
-	sb.WriteString(fmt.Sprintf("- Memory: %.1f%% (%.1f/%.1f GB used)\n",
+
+	// Key metrics only
+	sb.WriteString(fmt.Sprintf("CPU: %.0f%%, Memory: %.0f%%, Disk: %.0f%%\n",
+		health.SystemMetrics.CPU.Percent,
 		health.SystemMetrics.Memory.Percent,
-		health.SystemMetrics.Memory.UsedGB,
-		health.SystemMetrics.Memory.TotalGB))
-	sb.WriteString(fmt.Sprintf("- Disk: %.1f%% (%.1f/%.1f GB used)\n",
-		health.SystemMetrics.Disk.Percent,
-		health.SystemMetrics.Disk.UsedGB,
-		health.SystemMetrics.Disk.TotalGB))
+		health.SystemMetrics.Disk.Percent))
 
-	// Special notes
-	if health.SystemMetrics.CPU.Percent > 80 {
-		sb.WriteString("\n⚠️ HIGH CPU USAGE DETECTED\n")
-	}
-	if health.SystemMetrics.Memory.Percent > 85 {
-		sb.WriteString("\n⚠️ HIGH MEMORY USAGE DETECTED\n")
-	}
-
-	sb.WriteString("\nProvide a brief analysis including:\n")
-	sb.WriteString("1. Overall system health assessment\n")
-	sb.WriteString("2. Any issues or concerns identified\n")
-	sb.WriteString("3. Specific recommendations for any problems\n")
-	sb.WriteString("4. Performance optimization suggestions if applicable\n")
-	sb.WriteString("\nKeep the response concise and actionable.")
+	sb.WriteString("\nSummarize the health status and any critical issues:")
 
 	return sb.String()
 }
@@ -126,8 +97,8 @@ func (hc *HealthChecker) callOllamaForAnalysis(ctx context.Context, prompt strin
 		"prompt": prompt,
 		"stream": false,
 		"options": map[string]interface{}{
-			"temperature": 0.7,
-			"num_predict": 500, // Keep analysis concise
+			"temperature": 0.3,
+			"num_predict": 150, // Keep analysis very concise
 		},
 	}
 
@@ -136,8 +107,8 @@ func (hc *HealthChecker) callOllamaForAnalysis(ctx context.Context, prompt strin
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Make the request with a reasonable timeout
-	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Make the request with a very short timeout for simplified analysis
+	reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, "POST",

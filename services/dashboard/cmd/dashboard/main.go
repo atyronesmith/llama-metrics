@@ -52,7 +52,16 @@ func main() {
 	router := gin.Default()
 
 	// Load HTML templates
-	router.LoadHTMLGlob("web/templates/*")
+	router.LoadHTMLFiles(
+		"web/templates/dashboard.html",
+		"web/templates/partials/head.html",
+		"web/templates/partials/navbar.html", 
+		"web/templates/partials/ai-status.html",
+		"web/templates/partials/llm-performance.html",
+		"web/templates/partials/queue-management.html",
+		"web/templates/partials/hardware-metrics.html",
+		"web/templates/partials/charts.html",
+	)
 
 	// Static files
 	router.Static("/static", "./web/static")

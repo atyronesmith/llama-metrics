@@ -1,0 +1,77 @@
+.metric-card {
+    transition: all 0.3s ease;
+    border-left: 4px solid;
+}
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+.metric-value {
+    font-size: 2rem;
+    font-weight: bold;
+}
+.metric-label {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+}
+.status-healthy { background-color: #28a745; }
+.status-warning { background-color: #ffc107; }
+.status-error { background-color: #dc3545; }
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+.last-updated {
+    color: #6c757d;
+    font-size: 0.8rem;
+}
+.navbar-brand {
+    font-weight: bold;
+}
+.card-success { border-left-color: #28a745; }
+.card-primary { border-left-color: #007bff; }
+.card-warning { border-left-color: #ffc107; }
+.card-info { border-left-color: #17a2b8; }
+.card-danger { border-left-color: #dc3545; }
+.vr {
+    width: 1px;
+    background-color: rgba(255, 255, 255, 0.4);
+    height: 24px;
+}
+.metrics-section {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #f8f9fa;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+.metrics-section h5 {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 15px;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 5px;
+}
+.compact-status {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 0 8px;
+}
+.compact-status .status-label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 2px;
+}
+.compact-status .status-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

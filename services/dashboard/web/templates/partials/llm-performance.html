@@ -1,0 +1,50 @@
+<!-- LLM Performance Metrics Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="metrics-section">
+            <h5><i class="bi bi-cpu"></i> LLM Performance Metrics</h5>
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <div class="card metric-card card-primary h-100" title="Prometheus Query: rate(ollama_proxy_requests_total[2m]) or local request history calculation">
+                        <div class="card-body text-center">
+                            <div class="metric-value" id="request-rate">0.0</div>
+                            <div class="metric-label">
+                                <i class="bi bi-speedometer2"></i> Requests/sec
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card metric-card card-info h-100" title="Prometheus Query: sum(rate(ollama_proxy_request_duration_seconds_sum{endpoint=&quot;/api/generate&quot;}[5m])) / sum(rate(ollama_proxy_request_duration_seconds_count{endpoint=&quot;/api/generate&quot;}[5m]))">
+                        <div class="card-body text-center">
+                            <div class="metric-value" id="avg-latency">0.0</div>
+                            <div class="metric-label">
+                                <i class="bi bi-clock"></i> Avg Latency (s)
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card metric-card card-success h-100" title="Prometheus Query: rate(ollama_proxy_requests_total{status=&quot;200&quot;}[5m]) / rate(ollama_proxy_requests_total[5m]) * 100">
+                        <div class="card-body text-center">
+                            <div class="metric-value" id="success-rate">100.0%</div>
+                            <div class="metric-label">
+                                <i class="bi bi-check-circle"></i> Success Rate
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <div class="card metric-card card-warning h-100" title="Prometheus Query: rate(ollama_proxy_generated_tokens_total[5m])">
+                        <div class="card-body text-center">
+                            <div class="metric-value" id="tokens-per-sec">0.0</div>
+                            <div class="metric-label">
+                                <i class="bi bi-textarea-t"></i> Tokens/sec
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
